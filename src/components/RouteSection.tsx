@@ -1,19 +1,58 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { MapPin, Plus, X, Navigation, MoreVertical } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
+import GoogleMapComponent, { GoogleMapComponentRef } from "@/components/GoogleMapComponent";
+import { apiService } from "@/services/apiService";
 
 interface Stop {
   id: string;
   location: string;
 }
 
-export function RouteSection() {
+interface RouteSectionProps {
+  adjustedRange?: number;
+}
+
+export function RouteSection({ adjustedRange: propAdjustedRange }: RouteSectionProps) {
   const [startLocation, setStartLocation] = useState("");
   const [endLocation, setEndLocation] = useState("");
   const [stops, setStops] = useState<Stop[]>([]);
+  const [distance, setDistance] = useState<number | null>(null);
+  const [gasStops, setGasStops] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const mapRef = useRef<GoogleMapComponentRef>(null);
+
+  const handleDistanceCalculated = (distanceMiles: number) => {
+    setDistance(distanceMiles);
+  };
+
+  const handleGasStopsCalculated = (stops: any[]) => {
+    setGasStops(stops);
+  };
+
+  const handleGoClick = async () => {
+    if (!startLocation || !endLocation || !propAdjustedRange) {
+      console.warn('Missing required data for route calculation');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const routeData = await apiService.calculateRoute({
+        startLocation,
+        endLocation,
+        adjustedRange: propAdjustedRange
+      });
+      console.log('Route calculated:', routeData);
+    } catch (error) {
+      console.error('Error calculating route:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const addStop = () => {
     const newStop: Stop = {
@@ -136,20 +175,88 @@ export function RouteSection() {
         </div>
       </div>
 
-      {/* Map Placeholder */}
-      <div className="relative h-48 rounded-xl bg-secondary/50 border-2 border-dashed border-border overflow-hidden">
-        <div className="absolute inset-0 flex items-center justify-center">
-          <div className="text-center">
-            <MapPin className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
-            <p className="text-sm text-muted-foreground font-medium">
-              Map will appear here
-            </p>
-            <p className="text-xs text-muted-foreground">
-              Connect Google Maps API
-            </p>
+      {/* Map Section */}
+      <div className="relative h-96 rounded-xl overflow-hidden border border-border">
+        <GoogleMapComponent
+          ref={mapRef}
+          apiKey="YOUR_GOOGLE_MAPS_API_KEY"
+          onDistanceCalculated={handleDistanceCalculated}
+          adjustedRange={propAdjustedRange}
+          onGasStopsCalculated={handleGasStopsCalculated}
+          onStartLocationChanged={setStartLocation}
+          startLocationValue={startLocation}
+          onGoClick={handleGoClick}
+        />
+      </div>
+
+      {/* Route Summary */}
+      {distance && (
+        <div className="travel-card space-y-4">
+          <div className="flex items-center gap-3">
+            <div className="h-10 w-10 rounded-lg teal-gradient flex items-center justify-center">
+              <Navigation className="h-5 w-5 text-primary-foreground" />
+            </div>
+            <div>
+              <h3 className="text-lg font-bold text-foreground">Route Summary</h3>
+              <p className="text-sm text-muted-foreground">Your journey details</p>
+            </div>
+          </div>
+          
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="text-center p-4 rounded-lg bg-secondary/50">
+              <p className="text-2xl font-bold text-primary">{distance}</p>
+              <p className="text-sm text-muted-foreground">miles</p>
+            </div>
+            <div className="text-center p-4 rounded-lg bg-secondary/50">
+              <p className="text-2xl font-bold text-accent">{gasStops.length}</p>
+              <p className="text-sm text-muted-foreground">gas stops</p>
+            </div>
+            <div className="text-center p-4 rounded-lg bg-secondary/50">
+              <p className="text-2xl font-bold text-primary">{propAdjustedRange || '—'}</p>
+              <p className="text-sm text-muted-foreground">mile range</p>
+            </div>
+            <div className="text-center p-4 rounded-lg bg-secondary/50">
+              <p className="text-2xl font-bold text-accent">{Math.round((distance / (propAdjustedRange || 1)) * 10) / 10}</p>
+              <p className="text-sm text-muted-foreground">tank count</p>
+            </div>
           </div>
         </div>
-      </div>
+      )}
+
+      {/* Gas Stops List */}
+      {gasStops.length > 0 && (
+        <div className="travel-card space-y-4">
+          <div className="flex items-center gap-3">
+            <div className="h-10 w-10 rounded-lg sunset-gradient flex items-center justify-center">
+              <MapPin className="h-5 w-5 text-primary-foreground" />
+            </div>
+            <div>
+              <h3 className="text-lg font-bold text-foreground">Recommended Gas Stops</h3>
+              <p className="text-sm text-muted-foreground">Optimized fueling stations along your route</p>
+            </div>
+          </div>
+          
+          <div className="space-y-3">
+            {gasStops.map((stop, index) => (
+              <div key={index} className="p-4 rounded-lg border border-border bg-card">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <h4 className="font-semibold text-foreground">{stop.name}</h4>
+                    <p className="text-sm text-muted-foreground">{stop.vicinity}</p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {stop.distanceFromStart} miles from start • {stop.distanceFromLast} miles from last stop
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-lg font-bold text-primary">${stop.price}</p>
+                    <p className="text-xs text-muted-foreground">per gallon</p>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

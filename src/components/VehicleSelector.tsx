@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Car, Bike, Truck, Zap } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { apiService } from "@/services/apiService";
 
 type VehicleType = "car" | "motorcycle" | "rv" | "electric";
 
@@ -26,26 +27,126 @@ const vehicleOptions: VehicleOption[] = [
   { id: "electric", label: "Electric", icon: Zap },
 ];
 
-// Sample data - in production this would come from an API
-const carMakes = ["Toyota", "Honda", "Ford", "Chevrolet", "BMW", "Tesla", "Mercedes", "Audi"];
-const carModels: Record<string, string[]> = {
-  Toyota: ["Camry", "Corolla", "RAV4", "Highlander", "Prius"],
-  Honda: ["Civic", "Accord", "CR-V", "Pilot", "Odyssey"],
-  Ford: ["F-150", "Mustang", "Explorer", "Escape", "Bronco"],
-  Chevrolet: ["Silverado", "Malibu", "Equinox", "Tahoe", "Camaro"],
-  BMW: ["3 Series", "5 Series", "X3", "X5", "M4"],
-  Tesla: ["Model S", "Model 3", "Model X", "Model Y", "Cybertruck"],
-  Mercedes: ["C-Class", "E-Class", "GLE", "S-Class", "G-Class"],
-  Audi: ["A4", "A6", "Q5", "Q7", "e-tron"],
-};
+interface VehicleSelectorProps {
+  onVehicleChange?: (data: any) => void;
+}
 
-const years = Array.from({ length: 30 }, (_, i) => (2025 - i).toString());
-
-export function VehicleSelector() {
+export function VehicleSelector({ onVehicleChange }: VehicleSelectorProps) {
   const [selectedType, setSelectedType] = useState<VehicleType>("car");
   const [year, setYear] = useState<string>("");
   const [make, setMake] = useState<string>("");
   const [model, setModel] = useState<string>("");
+  
+  // API data states
+  const [years, setYears] = useState<string[]>([]);
+  const [makes, setMakes] = useState<string[]>([]);
+  const [models, setModels] = useState<string[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string>("");
+  const [vehicleInfo, setVehicleInfo] = useState<any>(null);
+
+  // Load years on mount
+  useEffect(() => {
+    loadYears();
+  }, [selectedType]);
+
+  // Load makes when year changes
+  useEffect(() => {
+    if (year) {
+      loadMakes();
+    } else {
+      setMakes([]);
+      setModels([]);
+    }
+  }, [year, selectedType]);
+
+  // Load models when make changes
+  useEffect(() => {
+    if (year && make) {
+      loadModels();
+    } else {
+      setModels([]);
+    }
+  }, [year, make, selectedType]);
+
+  // Fetch vehicle info when model is selected
+  useEffect(() => {
+    if (year && make && model) {
+      fetchVehicleInfo();
+    }
+  }, [year, make, model, selectedType]);
+
+  // Notify parent when vehicle info changes
+  useEffect(() => {
+    if (vehicleInfo) {
+      onVehicleChange?.(vehicleInfo);
+    }
+  }, [vehicleInfo, onVehicleChange]);
+
+  const loadYears = async () => {
+    try {
+      setLoading(true);
+      setError("");
+      const typeMap = { car: "cars", motorcycle: "motorcycles", rv: "rv", electric: "ev" };
+      const data = await apiService.getYears(typeMap[selectedType as keyof typeof typeMap]);
+      setYears(data);
+    } catch (err) {
+      setError("Failed to load years");
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadMakes = async () => {
+    try {
+      setLoading(true);
+      setError("");
+      const typeMap = { car: "cars", motorcycle: "motorcycles", rv: "rv", electric: "ev" };
+      const data = await apiService.getMakes(year, typeMap[selectedType as keyof typeof typeMap]);
+      setMakes(data);
+    } catch (err) {
+      setError("Failed to load makes");
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadModels = async () => {
+    try {
+      setLoading(true);
+      setError("");
+      const typeMap = { car: "cars", motorcycle: "motorcycles", rv: "rv", electric: "ev" };
+      const data = await apiService.getModels(year, make, typeMap[selectedType as keyof typeof typeMap]);
+      setModels(data);
+    } catch (err) {
+      setError("Failed to load models");
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchVehicleInfo = async () => {
+    try {
+      setLoading(true);
+      setError("");
+      const typeMap = { car: "cars", motorcycle: "motorcycles", rv: "rv", electric: "ev" };
+      const data = await apiService.getVehicleInfo({
+        year,
+        make,
+        model,
+        type: typeMap[selectedType as keyof typeof typeMap]
+      });
+      setVehicleInfo(data);
+    } catch (err) {
+      setError("Failed to fetch vehicle info");
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleMakeChange = (value: string) => {
     setMake(value);
@@ -100,6 +201,12 @@ export function VehicleSelector() {
       </div>
 
       {/* Vehicle Details */}
+      {error && (
+        <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20">
+          <p className="text-sm text-destructive">{error}</p>
+        </div>
+      )}
+      
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="space-y-2">
           <Label htmlFor="year" className="text-sm font-medium text-foreground">
@@ -128,7 +235,7 @@ export function VehicleSelector() {
               <SelectValue placeholder="Select make" />
             </SelectTrigger>
             <SelectContent>
-              {carMakes.map((m) => (
+              {makes.map((m) => (
                 <SelectItem key={m} value={m}>
                   {m}
                 </SelectItem>
@@ -146,12 +253,11 @@ export function VehicleSelector() {
               <SelectValue placeholder={make ? "Select model" : "Select make first"} />
             </SelectTrigger>
             <SelectContent>
-              {make &&
-                carModels[make]?.map((m) => (
-                  <SelectItem key={m} value={m}>
-                    {m}
-                  </SelectItem>
-                ))}
+              {models.map((m) => (
+                <SelectItem key={m} value={m}>
+                  {m}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </div>

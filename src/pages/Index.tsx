@@ -5,8 +5,15 @@ import { RouteSection } from "@/components/RouteSection";
 import { AlternativeTravel } from "@/components/AlternativeTravel";
 import { Button } from "@/components/ui/button";
 import { Navigation, Sparkles } from "lucide-react";
+import { useState } from "react";
 
 const Index = () => {
+  const [vehicleData, setVehicleData] = useState<any>(null);
+
+  const handleVehicleChange = (data: any) => {
+    setVehicleData(data);
+  };
+
   return (
     <div className="min-h-screen hero-bg">
       <Header />
@@ -35,13 +42,13 @@ const Index = () => {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 max-w-7xl mx-auto">
           {/* Left Column */}
           <div className="space-y-6">
-            <VehicleSelector />
+            <VehicleSelector onVehicleChange={handleVehicleChange} />
             <DepartureSection />
           </div>
 
           {/* Right Column */}
           <div className="space-y-6">
-            <RouteSection />
+            <RouteSection adjustedRange={vehicleData?.adjustedRange} />
           </div>
         </div>
 
