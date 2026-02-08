@@ -15,18 +15,18 @@ export function Header() {
           </div>
         </div>
         <nav className="hidden md:flex items-center gap-6">
-          <a href="#" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
-            Plan Trip
-          </a>
+          {/* <a href="#" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
+            Plan Trip */}
+          {/* </a>
           <a href="#" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
             My Trips
           </a>
           <a href="#" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
             Gas Stations
-          </a>
-          <Button variant="sunset" size="sm">
+          </a> */}
+          {/* <Button variant="sunset" size="sm">
             Sign In
-          </Button>
+          </Button> */}
         </nav>
         <Button variant="ghost" size="icon" className="md:hidden">
           <Menu className="h-5 w-5" />
