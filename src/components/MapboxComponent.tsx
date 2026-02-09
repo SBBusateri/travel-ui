@@ -2,7 +2,7 @@ import { useState, useCallback, useRef, forwardRef, useImperativeHandle, useEffe
 import Map, { Marker, NavigationControl, GeolocateControl } from "react-map-gl/mapbox";
 import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
-import { MapPin, Navigation, Plus, X } from "lucide-react";
+import { MapPin, Navigation, Plus, X, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
@@ -13,6 +13,12 @@ interface Stop {
   id: string;
   location: string;
   position?: [number, number] | null;
+}
+
+interface AutocompleteSuggestion {
+  place_name: string;
+  center: [number, number];
+  text: string;
 }
 
 interface MapboxComponentProps {
@@ -45,6 +51,15 @@ const MapboxComponent = forwardRef<MapboxComponentRef, MapboxComponentProps>(({
   const [loading, setLoading] = useState(false);
   const [startInput, setStartInput] = useState("");
   const [endInput, setEndInput] = useState("");
+  const [startSuggestions, setStartSuggestions] = useState<AutocompleteSuggestion[]>([]);
+  const [endSuggestions, setEndSuggestions] = useState<AutocompleteSuggestion[]>([]);
+  const [showStartSuggestions, setShowStartSuggestions] = useState(false);
+  const [showEndSuggestions, setShowEndSuggestions] = useState(false);
+  const [loadingSuggestions, setLoadingSuggestions] = useState(false);
+  const [userLocation, setUserLocation] = useState<[number, number] | null>(null);
+  const [stopInputs, setStopInputs] = useState<string[]>([]);
+  const [stopSuggestions, setStopSuggestions] = useState<AutocompleteSuggestion[][]>([]);
+  const [showStopSuggestions, setShowStopSuggestions] = useState<boolean[]>([]);
 
   const geocodeAddress = async (address: string): Promise<[number, number] | null> => {
     try {
@@ -59,6 +74,111 @@ const MapboxComponent = forwardRef<MapboxComponentRef, MapboxComponentProps>(({
       console.error("Geocoding error:", error);
     }
     return null;
+  };
+
+  const getAutocompleteSuggestions = async (query: string, userCoords?: [number, number]): Promise<AutocompleteSuggestion[]> => {
+    if (!query || query.length < 2) return [];
+    
+    try {
+      setLoadingSuggestions(true);
+      
+      // Enhanced search with proximity to user location
+      const proximity = userCoords ? `&proximity=${userCoords[0]},${userCoords[1]}` : '';
+      
+      // Enhanced search with multiple query types to find buildings, colleges, landmarks
+      const searchQueries = [
+        // General places search with proximity
+        `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(query)}.json?access_token=${apiKey}&limit=5&autocomplete=true&types=address,poi,place${proximity}`,
+        // POI (Points of Interest) search for buildings, colleges with proximity
+        `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(query)}.json?access_token=${apiKey}&limit=5&autocomplete=true&types=poi${proximity}`,
+        // Address search as fallback with proximity
+        `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(query)}.json?access_token=${apiKey}&limit=5&autocomplete=true&types=address${proximity}`
+      ];
+      
+      const promises = searchQueries.map(url => 
+        fetch(url).then(res => res.json()).catch(() => ({ features: [] }))
+      );
+      
+      const results = await Promise.all(promises);
+      const allFeatures = results.flatMap(result => result.features || []);
+      
+      // Remove duplicates based on coordinates and place_name
+      const uniqueFeatures = allFeatures.filter((feature, index, self) => 
+        index === self.findIndex((f) => 
+          f.center[0] === feature.center[0] && 
+          f.center[1] === feature.center[1] &&
+          f.place_name === feature.place_name
+        )
+      );
+      
+      // Prioritize POI and place results over addresses, and proximity
+      const prioritizedFeatures = uniqueFeatures.sort((a, b) => {
+        const aScore = getPriorityScore(a, query, userCoords);
+        const bScore = getPriorityScore(b, query, userCoords);
+        return bScore - aScore;
+      });
+      
+      return prioritizedFeatures.slice(0, 3).map((feature: any) => ({
+        place_name: feature.place_name,
+        center: feature.center,
+        text: feature.text
+      })) || [];
+    } catch (error) {
+      console.error("Autocomplete error:", error);
+      return [];
+    } finally {
+      setLoadingSuggestions(false);
+    }
+  };
+
+  // Helper function to prioritize certain types of results
+  const getPriorityScore = (feature: any, query: string, userCoords?: [number, number]): number => {
+    const placeName = (feature.place_name || "").toLowerCase();
+    const text = (feature.text || "").toLowerCase();
+    const queryLower = query.toLowerCase();
+    
+    let score = 0;
+    
+    // Boost for POI (Points of Interest)
+    if (feature.place_type && feature.place_type.includes('poi')) {
+      score += 10;
+    }
+    
+    // Boost for educational institutions
+    if (placeName.includes('university') || placeName.includes('college') || 
+        placeName.includes('school') || text.includes('university') || 
+        text.includes('college') || text.includes('school')) {
+      score += 15;
+    }
+    
+    // Boost for exact text matches
+    if (text === queryLower) {
+      score += 8;
+    }
+    
+    // Boost for building/landmark indicators
+    if (placeName.includes('building') || placeName.includes('center') ||
+        placeName.includes('hall') || placeName.includes('stadium') ||
+        placeName.includes('arena') || placeName.includes('library')) {
+      score += 5;
+    }
+    
+    // Boost for common abbreviations
+    if (queryLower === 'ucm' && placeName.includes('university of central missouri')) {
+      score += 20;
+    }
+    if (queryLower === 'semo' && placeName.includes('southeast missouri state university')) {
+      score += 20;
+    }
+    
+    // Proximity boost - prioritize results closer to user
+    if (userCoords && feature.center) {
+      const distance = calculateDistance(userCoords, feature.center as [number, number]);
+      // Closer results get higher scores (inverse distance scoring)
+      score += Math.max(0, 10 - distance);
+    }
+    
+    return score;
   };
 
   const findNearestGasStation = async (position: [number, number], maxDistance = 5000): Promise<any> => {
@@ -228,21 +348,117 @@ const MapboxComponent = forwardRef<MapboxComponentRef, MapboxComponentProps>(({
     setStartInput(value);
     onStartLocationChanged?.(value);
     
-    const coords = await geocodeAddress(value);
-    if (coords) {
-      setStartLocation(coords);
-      if (map) {
-        map.flyTo({ center: coords, zoom: 10 });
-      }
-    }
+    // Get autocomplete suggestions with user location
+    const suggestions = await getAutocompleteSuggestions(value, userLocation);
+    setStartSuggestions(suggestions);
+    setShowStartSuggestions(suggestions.length > 0);
+    
+    // Don't update map location yet - wait for user selection
   };
 
   const handleEndLocationChange = async (value: string) => {
     setEndInput(value);
     
-    const coords = await geocodeAddress(value);
-    if (coords) {
-      setEndLocation(coords);
+    // Get autocomplete suggestions with user location
+    const suggestions = await getAutocompleteSuggestions(value, userLocation);
+    setEndSuggestions(suggestions);
+    setShowEndSuggestions(suggestions.length > 0);
+    
+    // Don't update map location yet - wait for user selection
+    
+    // Auto-calculate route when destination is selected
+    if (endLocation && startLocation) {
+      calculateRoute();
+    }
+  };
+
+  const selectStartSuggestion = async (suggestion: AutocompleteSuggestion) => {
+    setStartInput(suggestion.place_name);
+    setStartLocation(suggestion.center);
+    setShowStartSuggestions(false);
+    setStartSuggestions([]);
+    onStartLocationChanged?.(suggestion.place_name);
+    
+    // Now move map after selection
+    if (map) {
+      map.flyTo({ center: suggestion.center, zoom: 10 });
+    }
+    
+    // Auto-calculate route if destination already selected
+    if (endLocation) {
+      calculateRoute();
+    }
+  };
+
+  const selectEndSuggestion = async (suggestion: AutocompleteSuggestion) => {
+    setEndInput(suggestion.place_name);
+    setEndLocation(suggestion.center);
+    setShowEndSuggestions(false);
+    setEndSuggestions([]);
+    
+    // Now move map after selection
+    if (map) {
+      map.flyTo({ center: suggestion.center, zoom: 10 });
+    }
+    
+    // Auto-calculate route
+    if (startLocation) {
+      calculateRoute();
+    }
+  };
+
+  const addStop = () => {
+    const newStopId = Date.now().toString();
+    setStopInputs([...stopInputs, '']);
+    setStopSuggestions([...stopSuggestions, []]);
+    setShowStopSuggestions([...showStopSuggestions, false]);
+  };
+
+  const removeStop = (index: number) => {
+    const newStopInputs = stopInputs.filter((_, i) => i !== index);
+    const newStopLocations = waypoints.filter((_, i) => i !== index);
+    setStopInputs(newStopInputs);
+    setWaypoints(newStopLocations);
+    
+    // Recalculate route if needed
+    if (startLocation && endLocation) {
+      calculateRoute();
+    }
+  };
+
+  const handleStopChange = async (index: number, value: string) => {
+    const newStopInputs = [...stopInputs];
+    newStopInputs[index] = value;
+    setStopInputs(newStopInputs);
+    
+    // Get autocomplete suggestions for stop
+    const suggestions = await getAutocompleteSuggestions(value, userLocation);
+    const newStopSuggestions = [...stopSuggestions];
+    newStopSuggestions[index] = suggestions;
+    setStopSuggestions(newStopSuggestions);
+    
+    const newShowSuggestions = [...showStopSuggestions];
+    newShowSuggestions[index] = suggestions.length > 0;
+    setShowStopSuggestions(newShowSuggestions);
+  };
+
+  const selectStopSuggestion = async (index: number, suggestion: AutocompleteSuggestion) => {
+    const newStopInputs = [...stopInputs];
+    const newStopLocations = [...waypoints];
+    
+    newStopInputs[index] = suggestion.place_name;
+    newStopLocations[index] = suggestion.center;
+    
+    setStopInputs(newStopInputs);
+    setWaypoints(newStopLocations);
+    
+    const newShowSuggestions = [...showStopSuggestions];
+    newShowSuggestions[index] = false;
+    setShowStopSuggestions(newShowSuggestions);
+    
+    // Recalculate route
+    if (startLocation && endLocation) {
+      calculateRoute();
     }
   };
 
@@ -251,6 +467,7 @@ const MapboxComponent = forwardRef<MapboxComponentRef, MapboxComponentProps>(({
       navigator.geolocation.getCurrentPosition(
         async (position) => {
           const currentLocation: [number, number] = [position.coords.longitude, position.coords.latitude];
+          setUserLocation(currentLocation);
           setStartLocation(currentLocation);
           
           if (map) {
@@ -369,41 +586,158 @@ const MapboxComponent = forwardRef<MapboxComponentRef, MapboxComponentProps>(({
       {/* Map Overlay Controls - Top Left, Smaller, More Transparent */}
       <div className="absolute top-4 left-4 w-80 space-y-2">
         <div className="bg-white/10 backdrop-blur-md rounded-lg shadow-lg p-3 space-y-2 border border-white/20">
-          <div className="flex items-center gap-2">
-            <Input
-              placeholder="Start Location"
-              value={startInput || startLocationValue || ""}
-              onChange={(e) => handleStartLocationChange(e.target.value)}
-              className="flex-1 bg-white/50 backdrop-blur-sm border-white/30 text-gray-900 placeholder-gray-600"
-            />
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={handleUseCurrentLocation}
-              title="Use Current Location"
-              className="bg-white/50 backdrop-blur-sm border-white/30 hover:bg-white/70"
-            >
-              <Navigation className="h-4 w-4" />
-            </Button>
+          {/* Start Location Input with Autocomplete */}
+          <div className="relative">
+            <div className="flex items-center gap-2">
+              <Input
+                placeholder="Start Location"
+                value={startInput || startLocationValue || ""}
+                onChange={(e) => handleStartLocationChange(e.target.value)}
+                onFocus={() => setShowStartSuggestions(startSuggestions.length > 0)}
+                onBlur={() => setTimeout(() => setShowStartSuggestions(false), 200)}
+                className="flex-1 bg-white/50 backdrop-blur-sm border-white/30 text-gray-900 placeholder-gray-600"
+              />
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={handleUseCurrentLocation}
+                title="Use Current Location"
+                className="bg-white/50 backdrop-blur-sm border-white/30 hover:bg-white/70"
+              >
+                <Navigation className="h-4 w-4" />
+              </Button>
+            </div>
+            
+            {/* Autocomplete Dropdown for Start */}
+            {showStartSuggestions && (
+              <div className="absolute top-full left-0 right-0 mt-1 bg-white/95 backdrop-blur-sm rounded-lg shadow-lg border border-white/20 z-50 max-h-48 overflow-y-auto">
+                {loadingSuggestions ? (
+                  <div className="p-3 flex items-center justify-center">
+                    <Loader2 className="h-4 w-4 animate-spin text-gray-600" />
+                  </div>
+                ) : startSuggestions.length > 0 ? (
+                  startSuggestions.map((suggestion, index) => (
+                    <button
+                      key={index}
+                      onClick={() => selectStartSuggestion(suggestion)}
+                      className="w-full text-left px-3 py-2 hover:bg-gray-100 transition-colors border-b border-gray-100 last:border-b-0"
+                    >
+                      <div className="text-sm font-medium text-gray-900">{suggestion.text}</div>
+                      <div className="text-xs text-gray-600 truncate">{suggestion.place_name}</div>
+                    </button>
+                  ))
+                ) : (
+                  <div className="p-3 text-sm text-gray-500">No suggestions found</div>
+                )}
+              </div>
+            )}
           </div>
           
-          <Input 
-            placeholder="Destination" 
-            value={endInput}
-            onChange={(e) => handleEndLocationChange(e.target.value)}
-            className="w-full bg-white/50 backdrop-blur-sm border-white/30 text-gray-900 placeholder-gray-600"
-          />
+          {/* Stop Inputs */}
+          {stopInputs.map((stopInput, index) => (
+            <div key={index} className="relative">
+              <div className="flex items-center gap-2">
+                <Input
+                  placeholder={`Stop ${index + 1}`}
+                  value={stopInput}
+                  onChange={(e) => handleStopChange(index, e.target.value)}
+                  onFocus={() => setShowStopSuggestions(prev => {
+                    const newShow = [...prev];
+                    newShow[index] = stopSuggestions[index]?.length > 0;
+                    return newShow;
+                  })}
+                  onBlur={() => setTimeout(() => {
+                    setShowStopSuggestions(prev => {
+                      const newShow = [...prev];
+                      newShow[index] = false;
+                      return newShow;
+                    });
+                  }, 200)}
+                  className="flex-1 bg-white/50 backdrop-blur-sm border-white/30 text-gray-900 placeholder-gray-600"
+                />
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={() => removeStop(index)}
+                  title="Remove Stop"
+                  className="bg-white/50 backdrop-blur-sm border-white/30 hover:bg-white/70"
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+              
+              {/* Autocomplete Dropdown for Stop */}
+              {showStopSuggestions[index] && (
+                <div className="absolute top-full left-0 right-0 mt-1 bg-white/95 backdrop-blur-sm rounded-lg shadow-lg border border-white/20 z-50 max-h-48 overflow-y-auto">
+                  {loadingSuggestions ? (
+                    <div className="p-3 flex items-center justify-center">
+                      <Loader2 className="h-4 w-4 animate-spin text-gray-600" />
+                    </div>
+                  ) : stopSuggestions[index]?.length > 0 ? (
+                    stopSuggestions[index].map((suggestion, suggestionIndex) => (
+                      <button
+                        key={suggestionIndex}
+                        onClick={() => selectStopSuggestion(index, suggestion)}
+                        className="w-full text-left px-3 py-2 hover:bg-gray-100 transition-colors border-b border-gray-100 last:border-b-0"
+                      >
+                        <div className="text-sm font-medium text-gray-900">{suggestion.text}</div>
+                        <div className="text-xs text-gray-600 truncate">{suggestion.place_name}</div>
+                      </button>
+                    ))
+                  ) : (
+                    <div className="p-3 text-sm text-gray-500">No suggestions found</div>
+                  )}
+                </div>
+              )}
+            </div>
+          ))}
           
-          <Button 
-            onClick={() => {
-              calculateRouteWithStops();
-              onGoClick?.();
-            }}
-            disabled={loading || !startLocation || !endLocation || !adjustedRange}
-            className="w-full bg-white/50 backdrop-blur-sm border-white/30 hover:bg-white/70 text-gray-900"
+          {/* Add Stop Button */}
+          <Button
+            onClick={addStop}
+            variant="ghost"
+            size="sm"
+            className="w-full h-8 text-xs text-gray-600 hover:text-gray-900 hover:bg-white/20 border border-dashed border-gray-400/30 hover:border-gray-400/50"
           >
-            {loading ? "Calculating..." : "Calculate Route"}
+            <Plus className="h-3 w-3 mr-1" />
+            Add Stop
           </Button>
+          
+          {/* End Location Input with Autocomplete */}
+          <div className="relative">
+            <Input 
+              placeholder="Destination" 
+              value={endInput}
+              onChange={(e) => handleEndLocationChange(e.target.value)}
+              onFocus={() => setShowEndSuggestions(endSuggestions.length > 0)}
+              onBlur={() => setTimeout(() => setShowEndSuggestions(false), 200)}
+              className="w-full bg-white/50 backdrop-blur-sm border-white/30 text-gray-900 placeholder-gray-600"
+            />
+            
+            {/* Autocomplete Dropdown for End */}
+            {showEndSuggestions && (
+              <div className="absolute top-full left-0 right-0 mt-1 bg-white/95 backdrop-blur-sm rounded-lg shadow-lg border border-white/20 z-50 max-h-48 overflow-y-auto">
+                {loadingSuggestions ? (
+                  <div className="p-3 flex items-center justify-center">
+                    <Loader2 className="h-4 w-4 animate-spin text-gray-600" />
+                  </div>
+                ) : endSuggestions.length > 0 ? (
+                  endSuggestions.map((suggestion, index) => (
+                    <button
+                      key={index}
+                      onClick={() => selectEndSuggestion(suggestion)}
+                      className="w-full text-left px-3 py-2 hover:bg-gray-100 transition-colors border-b border-gray-100 last:border-b-0"
+                    >
+                      <div className="text-sm font-medium text-gray-900">{suggestion.text}</div>
+                      <div className="text-xs text-gray-600 truncate">{suggestion.place_name}</div>
+                    </button>
+                  ))
+                ) : (
+                  <div className="p-3 text-sm text-gray-500">No suggestions found</div>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>
