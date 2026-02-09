@@ -154,19 +154,19 @@ export function VehicleSelector({ onVehicleChange }: VehicleSelectorProps) {
   };
 
   return (
-    <div className="travel-card space-y-6">
-      <div className="flex items-center gap-3">
-        <div className="h-10 w-10 rounded-lg sunset-gradient flex items-center justify-center">
-          <Car className="h-5 w-5 text-primary-foreground" />
+    <div className="space-y-4">
+      {/* Header */}
+      <div className="flex items-center gap-2 mb-4">
+        <div className="h-8 w-8 rounded-lg sunset-gradient flex items-center justify-center">
+          <Car className="h-4 w-4 text-primary-foreground" />
         </div>
         <div>
-          <h2 className="text-lg font-bold text-foreground">Your Vehicle</h2>
-          <p className="text-sm text-muted-foreground">Select your ride</p>
+          <h2 className="text-base font-semibold text-foreground">Select your transportation</h2>
         </div>
       </div>
 
-      {/* Vehicle Type Selection */}
-      <div className="grid grid-cols-4 gap-3">
+      {/* Vehicle Type Selection - More Compact */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
         {vehicleOptions.map((option) => {
           const Icon = option.icon;
           const isSelected = selectedType === option.id;
@@ -175,15 +175,15 @@ export function VehicleSelector({ onVehicleChange }: VehicleSelectorProps) {
               key={option.id}
               onClick={() => setSelectedType(option.id)}
               className={cn(
-                "flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-all duration-200",
+                "flex flex-col items-center gap-1.5 p-3 rounded-lg border-2 transition-all duration-200 hover:scale-[1.02]",
                 isSelected
-                  ? "border-primary bg-primary/5 shadow-md"
-                  : "border-border hover:border-primary/30 hover:bg-secondary/50"
+                  ? "border-primary bg-primary/10 shadow-md"
+                  : "border-border hover:border-primary/30 hover:bg-secondary/30"
               )}
             >
               <Icon
                 className={cn(
-                  "h-6 w-6 transition-colors",
+                  "h-5 w-5 transition-colors",
                   isSelected ? "text-primary" : "text-muted-foreground"
                 )}
               />
@@ -200,27 +200,26 @@ export function VehicleSelector({ onVehicleChange }: VehicleSelectorProps) {
         })}
       </div>
 
-      {/* Vehicle Details */}
+      {/* Vehicle Details - Side-by-Side Layout */}
       {error && (
-        <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20 animate-fade-in">
-          <p className="text-sm text-destructive">{error}</p>
+        <div className="p-2 rounded-lg bg-destructive/10 border border-destructive/20 animate-fade-in">
+          <p className="text-xs text-destructive">{error}</p>
         </div>
       )}
       
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="space-y-2">
-          <Label htmlFor="year" className="text-sm font-medium text-foreground">
-            Year
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+        <div className="space-y-1">
+          <Label htmlFor="year" className="text-xs font-medium text-foreground">
           </Label>
           <Select value={year} onValueChange={setYear} disabled={loading}>
-            <SelectTrigger id="year" className="h-11">
+            <SelectTrigger id="year" className="h-9 text-sm">
               {loading && !year ? (
-                <div className="flex items-center gap-2">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  <span>Loading...</span>
+                <div className="flex items-center gap-1.5">
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                  <span className="text-xs">Loading...</span>
                 </div>
               ) : (
-                <SelectValue placeholder="Select year" />
+                <SelectValue placeholder="Year" />
               )}
             </SelectTrigger>
             <SelectContent>
@@ -233,19 +232,18 @@ export function VehicleSelector({ onVehicleChange }: VehicleSelectorProps) {
           </Select>
         </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="make" className="text-sm font-medium text-foreground">
-            Make
+        <div className="space-y-1">
+          <Label htmlFor="make" className="text-xs font-medium text-foreground">
           </Label>
           <Select value={make} onValueChange={handleMakeChange} disabled={loading || !year}>
-            <SelectTrigger id="make" className="h-11">
+            <SelectTrigger id="make" className="h-9 text-sm">
               {loading && year && !make ? (
-                <div className="flex items-center gap-2">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  <span>Loading...</span>
+                <div className="flex items-center gap-1.5">
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                  <span className="text-xs">Loading...</span>
                 </div>
               ) : (
-                <SelectValue placeholder="Select make" />
+                <SelectValue placeholder="Make" />
               )}
             </SelectTrigger>
             <SelectContent>
@@ -258,19 +256,18 @@ export function VehicleSelector({ onVehicleChange }: VehicleSelectorProps) {
           </Select>
         </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="model" className="text-sm font-medium text-foreground">
-            Model
+        <div className="space-y-1">
+          <Label htmlFor="model" className="text-xs font-medium text-foreground">
           </Label>
           <Select value={model} onValueChange={setModel} disabled={loading || !make}>
-            <SelectTrigger id="model" className="h-11">
+            <SelectTrigger id="model" className="h-9 text-sm">
               {loading && make && !model ? (
-                <div className="flex items-center gap-2">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  <span>Loading...</span>
+                <div className="flex items-center gap-1.5">
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                  <span className="text-xs">Loading...</span>
                 </div>
               ) : (
-                <SelectValue placeholder={make ? "Select model" : "Select make first"} />
+                <SelectValue placeholder={make ? "Model" : "Model "}/>
               )}
             </SelectTrigger>
             <SelectContent>
@@ -284,13 +281,13 @@ export function VehicleSelector({ onVehicleChange }: VehicleSelectorProps) {
         </div>
       </div>
 
-      {/* Vehicle Info Display */}
+      {/* Vehicle Info Display - More Compact */}
       {vehicleInfo && (
-        <div className="p-4 rounded-lg bg-primary/5 border border-primary/20 animate-fade-in">
+        <div className="p-3 rounded-lg bg-primary/5 border border-primary/20 animate-fade-in">
           <div className="flex items-center justify-between">
             <div>
-              <p className="font-medium text-foreground">Vehicle Selected</p>
-              <p className="text-sm text-muted-foreground">
+              <p className="text-sm font-medium text-foreground">Vehicle Selected</p>
+              <p className="text-xs text-muted-foreground">
                 {year} {make} {model}
               </p>
             </div>

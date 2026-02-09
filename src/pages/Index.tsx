@@ -19,11 +19,6 @@ const Index = () => {
       {/* Hero Section */}
       <section className="container py-8 md:py-12 lg:py-16 px-4">
         <div className="max-w-3xl mx-auto text-center mb-8 md:mb-12">
-          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 text-primary text-sm font-medium mb-4 md:mb-6 animate-fade-in">
-            <Sparkles className="h-4 w-4" />
-            <span className="hidden sm:inline">AI-Powered Travel Planning</span>
-            <span className="sm:hidden">AI Travel</span>
-          </div>
           <h1 className="text-3xl md:text-4xl lg:text-5xl xl:text-6xl font-extrabold text-foreground mb-4 leading-tight">
             Plan Your Perfect
             <span className="block bg-gradient-to-r from-primary via-primary to-accent bg-clip-text text-transparent">

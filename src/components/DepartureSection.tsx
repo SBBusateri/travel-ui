@@ -45,8 +45,7 @@ export function DepartureSection() {
             <Clock className="h-5 w-5 text-primary-foreground" />
           </div>
           <div>
-            <h2 className="text-lg font-bold text-foreground">Departure</h2>
-            <p className="text-sm text-muted-foreground">When are you leaving?</p>
+            <h2 className="text-lg font-bold text-foreground">Departure time</h2>
           </div>
         </div>
         <Button variant="leave-now" size="sm" onClick={handleLeaveNow} className="gap-2">
