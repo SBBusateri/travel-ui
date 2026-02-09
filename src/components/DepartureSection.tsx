@@ -38,37 +38,51 @@ export function DepartureSection() {
   };
 
   return (
-    <div className="travel-card space-y-6">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="h-10 w-10 rounded-lg sunset-gradient flex items-center justify-center">
-            <Clock className="h-5 w-5 text-primary-foreground" />
+    <div className="space-y-4">
+      {/* Header */}
+
+
+      {/* Separator Line */}
+      <div className="border-t border-dashed border-border/1000 my-2" />
+
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <div className="h-8 w-8 rounded-lg sunset-gradient flex items-center justify-center">
+            <Clock className="h-4 w-4 text-primary-foreground" />
           </div>
           <div>
-            <h2 className="text-lg font-bold text-foreground">Departure time</h2>
+            <h2 className="text-base font-semibold text-foreground">Departure time</h2>
           </div>
         </div>
-        <Button variant="leave-now" size="sm" onClick={handleLeaveNow} className="gap-2">
-          <Zap className="h-4 w-4" />
+        
+        {/* Leave Now Button - Top Left */}
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleLeaveNow}
+          className="text-xs h-7 px-2 border-border/50 hover:border-primary/30 hover:bg-primary/5"
+        >
+          <Zap className="h-3 w-3 mr-1" />
           Leave Now
         </Button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      {/* Date & Time Pickers - More Compact */}
+      <div className="grid grid-cols-1 gap-2">
         {/* Date Picker */}
-        <div className="space-y-2">
-          <Label className="text-sm font-medium text-foreground">Date</Label>
+        <div className="space-y-1">
+          <Label className="text-xs font-medium text-foreground mb-1">Date</Label>
           <Popover>
             <PopoverTrigger asChild>
               <Button
                 variant="outline"
                 className={cn(
-                  "w-full h-11 justify-start text-left font-normal",
+                  "w-full h-8 justify-start text-left font-normal text-sm",
                   !date && "text-muted-foreground"
                 )}
               >
-                <Calendar className="mr-2 h-4 w-4" />
-                {date ? format(date, "PPP") : <span>Pick a date</span>}
+                <Calendar className="mr-2 h-3 w-3" />
+                {date ? format(date, "MMM d, yyyy") : <span>Select date</span>}
               </Button>
             </PopoverTrigger>
             <PopoverContent className="w-auto p-0" align="start">
@@ -85,11 +99,11 @@ export function DepartureSection() {
         </div>
 
         {/* Time Picker */}
-        <div className="space-y-2">
-          <Label className="text-sm font-medium text-foreground">Time</Label>
-          <div className="flex gap-2">
+        <div className="space-y-1">
+          <Label className="text-xs font-medium text-foreground mb-1">Time</Label>
+          <div className="flex gap-1">
             <Select value={hour} onValueChange={setHour}>
-              <SelectTrigger className="h-11 flex-1">
+              <SelectTrigger className="h-8 flex-1 text-sm">
                 <SelectValue placeholder="HH" />
               </SelectTrigger>
               <SelectContent>
@@ -100,9 +114,9 @@ export function DepartureSection() {
                 ))}
               </SelectContent>
             </Select>
-            <span className="flex items-center text-muted-foreground font-bold">:</span>
+            <span className="flex items-center text-muted-foreground font-bold text-sm">:</span>
             <Select value={minute} onValueChange={setMinute}>
-              <SelectTrigger className="h-11 flex-1">
+              <SelectTrigger className="h-8 flex-1 text-sm">
                 <SelectValue placeholder="MM" />
               </SelectTrigger>
               <SelectContent>
@@ -113,11 +127,11 @@ export function DepartureSection() {
                 ))}
               </SelectContent>
             </Select>
-            <div className="flex rounded-lg border-2 border-input overflow-hidden">
+            <div className="flex rounded-md border border-input overflow-hidden">
               <button
                 onClick={() => setPeriod("AM")}
                 className={cn(
-                  "px-3 h-11 text-sm font-medium transition-colors",
+                  "px-2 h-8 text-xs font-medium transition-colors",
                   period === "AM"
                     ? "bg-primary text-primary-foreground"
                     : "bg-background text-muted-foreground hover:bg-secondary"
@@ -128,7 +142,7 @@ export function DepartureSection() {
               <button
                 onClick={() => setPeriod("PM")}
                 className={cn(
-                  "px-3 h-11 text-sm font-medium transition-colors",
+                  "px-2 h-8 text-xs font-medium transition-colors",
                   period === "PM"
                     ? "bg-primary text-primary-foreground"
                     : "bg-background text-muted-foreground hover:bg-secondary"
