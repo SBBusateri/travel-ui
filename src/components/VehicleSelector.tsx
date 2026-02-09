@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Car, Bike, Truck, Zap } from "lucide-react";
+import { Car, Bike, Truck, Zap, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   Select,
@@ -202,7 +202,7 @@ export function VehicleSelector({ onVehicleChange }: VehicleSelectorProps) {
 
       {/* Vehicle Details */}
       {error && (
-        <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20">
+        <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20 animate-fade-in">
           <p className="text-sm text-destructive">{error}</p>
         </div>
       )}
@@ -212,9 +212,16 @@ export function VehicleSelector({ onVehicleChange }: VehicleSelectorProps) {
           <Label htmlFor="year" className="text-sm font-medium text-foreground">
             Year
           </Label>
-          <Select value={year} onValueChange={setYear}>
+          <Select value={year} onValueChange={setYear} disabled={loading}>
             <SelectTrigger id="year" className="h-11">
-              <SelectValue placeholder="Select year" />
+              {loading && !year ? (
+                <div className="flex items-center gap-2">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <span>Loading...</span>
+                </div>
+              ) : (
+                <SelectValue placeholder="Select year" />
+              )}
             </SelectTrigger>
             <SelectContent>
               {years.map((y) => (
@@ -230,9 +237,16 @@ export function VehicleSelector({ onVehicleChange }: VehicleSelectorProps) {
           <Label htmlFor="make" className="text-sm font-medium text-foreground">
             Make
           </Label>
-          <Select value={make} onValueChange={handleMakeChange}>
+          <Select value={make} onValueChange={handleMakeChange} disabled={loading || !year}>
             <SelectTrigger id="make" className="h-11">
-              <SelectValue placeholder="Select make" />
+              {loading && year && !make ? (
+                <div className="flex items-center gap-2">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <span>Loading...</span>
+                </div>
+              ) : (
+                <SelectValue placeholder="Select make" />
+              )}
             </SelectTrigger>
             <SelectContent>
               {makes.map((m) => (
@@ -248,9 +262,16 @@ export function VehicleSelector({ onVehicleChange }: VehicleSelectorProps) {
           <Label htmlFor="model" className="text-sm font-medium text-foreground">
             Model
           </Label>
-          <Select value={model} onValueChange={setModel} disabled={!make}>
+          <Select value={model} onValueChange={setModel} disabled={loading || !make}>
             <SelectTrigger id="model" className="h-11">
-              <SelectValue placeholder={make ? "Select model" : "Select make first"} />
+              {loading && make && !model ? (
+                <div className="flex items-center gap-2">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <span>Loading...</span>
+                </div>
+              ) : (
+                <SelectValue placeholder={make ? "Select model" : "Select make first"} />
+              )}
             </SelectTrigger>
             <SelectContent>
               {models.map((m) => (
@@ -262,6 +283,26 @@ export function VehicleSelector({ onVehicleChange }: VehicleSelectorProps) {
           </Select>
         </div>
       </div>
+
+      {/* Vehicle Info Display */}
+      {vehicleInfo && (
+        <div className="p-4 rounded-lg bg-primary/5 border border-primary/20 animate-fade-in">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="font-medium text-foreground">Vehicle Selected</p>
+              <p className="text-sm text-muted-foreground">
+                {year} {make} {model}
+              </p>
+            </div>
+            <div className="text-right">
+              <p className="text-lg font-bold text-primary">
+                {vehicleInfo.adjustedRange || '—'}
+              </p>
+              <p className="text-xs text-muted-foreground">mile range</p>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

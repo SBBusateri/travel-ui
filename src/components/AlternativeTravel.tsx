@@ -1,4 +1,5 @@
-import { Train, Plane, Bot, Clock, DollarSign, ArrowRight, Sparkles } from "lucide-react";
+import { useState } from "react";
+import { Train, Plane, Bot, Clock, DollarSign, ArrowRight, Sparkles, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -60,8 +61,17 @@ const flightOptions: TravelOption[] = [
   },
 ];
 
-function TravelCard({ option }: { option: TravelOption }) {
+function TravelCard({ option, onSelect }: { option: TravelOption; onSelect?: () => void }) {
   const Icon = option.type === "train" ? Train : Plane;
+  const [isLoading, setIsLoading] = useState(false);
+
+  const handleSelect = () => {
+    setIsLoading(true);
+    setTimeout(() => {
+      setIsLoading(false);
+      onSelect?.();
+    }, 1000);
+  };
 
   return (
     <div className="group p-4 rounded-xl border-2 border-border bg-card hover:border-primary/30 hover:shadow-md transition-all duration-200 cursor-pointer">
@@ -69,13 +79,13 @@ function TravelCard({ option }: { option: TravelOption }) {
         <div className="flex items-center gap-3">
           <div
             className={cn(
-              "h-10 w-10 rounded-lg flex items-center justify-center",
+              "h-10 w-10 rounded-lg flex items-center justify-center transition-colors",
               option.type === "train" ? "bg-accent/10" : "bg-primary/10"
             )}
           >
             <Icon
               className={cn(
-                "h-5 w-5",
+                "h-5 w-5 transition-colors",
                 option.type === "train" ? "text-accent" : "text-primary"
               )}
             />
@@ -94,27 +104,39 @@ function TravelCard({ option }: { option: TravelOption }) {
       </div>
 
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-2 md:gap-4">
           <div>
-            <p className="font-semibold text-foreground">{option.departureTime}</p>
+            <p className="font-semibold text-foreground text-sm md:text-base">{option.departureTime}</p>
             <p className="text-xs text-muted-foreground">Depart</p>
           </div>
-          <div className="flex items-center gap-2 text-muted-foreground">
-            <div className="h-px w-8 bg-border" />
+          <div className="flex items-center gap-1 md:gap-2 text-muted-foreground">
+            <div className="h-px w-4 md:w-8 bg-border" />
             <div className="flex items-center gap-1 text-xs">
               <Clock className="h-3 w-3" />
-              {option.duration}
+              <span className="hidden sm:inline">{option.duration}</span>
+              <span className="sm:hidden">{option.duration.replace('h ', 'h').replace('m', '')}</span>
             </div>
-            <div className="h-px w-8 bg-border" />
-            <ArrowRight className="h-4 w-4" />
+            <div className="h-px w-4 md:w-8 bg-border" />
+            <ArrowRight className="h-3 md:h-4 w-3 md:w-4" />
           </div>
           <div>
-            <p className="font-semibold text-foreground">{option.arrivalTime}</p>
+            <p className="font-semibold text-foreground text-sm md:text-base">{option.arrivalTime}</p>
             <p className="text-xs text-muted-foreground">Arrive</p>
           </div>
         </div>
-        <Button size="sm" variant="outline" className="opacity-0 group-hover:opacity-100 transition-opacity">
-          Select
+        <Button 
+          size="sm" 
+          variant="outline" 
+          className="opacity-0 group-hover:opacity-100 transition-opacity"
+          onClick={handleSelect}
+          disabled={isLoading}
+          aria-label={`Select ${option.provider} ${option.type}`}
+        >
+          {isLoading ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            "Select"
+          )}
         </Button>
       </div>
     </div>
@@ -165,7 +187,7 @@ export function AlternativeTravel() {
         </div>
         <div className="space-y-3">
           {trainOptions.map((option) => (
-            <TravelCard key={option.id} option={option} />
+            <TravelCard key={option.id} option={option} onSelect={() => console.log('Selected train:', option)} />
           ))}
         </div>
       </div>
@@ -178,7 +200,7 @@ export function AlternativeTravel() {
         </div>
         <div className="space-y-3">
           {flightOptions.map((option) => (
-            <TravelCard key={option.id} option={option} />
+            <TravelCard key={option.id} option={option} onSelect={() => console.log('Selected flight:', option)} />
           ))}
         </div>
       </div>
@@ -189,17 +211,17 @@ export function AlternativeTravel() {
           <DollarSign className="h-5 w-5 text-primary" />
           <h3 className="font-semibold text-foreground">Cost Comparison</h3>
         </div>
-        <div className="grid grid-cols-3 gap-4 text-center">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-center">
           <div className="p-3 rounded-lg bg-card">
-            <p className="text-2xl font-bold text-foreground">~$45</p>
+            <p className="text-xl md:text-2xl font-bold text-foreground">~$45</p>
             <p className="text-xs text-muted-foreground">Driving (est. gas)</p>
           </div>
           <div className="p-3 rounded-lg bg-accent/10 border border-accent/20">
-            <p className="text-2xl font-bold text-accent">$89</p>
+            <p className="text-xl md:text-2xl font-bold text-accent">$89</p>
             <p className="text-xs text-muted-foreground">Cheapest Train</p>
           </div>
           <div className="p-3 rounded-lg bg-primary/10 border border-primary/20">
-            <p className="text-2xl font-bold text-primary">$145</p>
+            <p className="text-xl md:text-2xl font-bold text-primary">$145</p>
             <p className="text-xs text-muted-foreground">Cheapest Flight</p>
           </div>
         </div>

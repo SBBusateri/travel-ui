@@ -1,7 +1,35 @@
-import { MapPin, Menu } from "lucide-react";
+import { MapPin, Menu, X, Moon, Sun } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useState, useEffect } from "react";
+import { cn } from "@/lib/utils";
 
 export function Header() {
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isDarkMode, setIsDarkMode] = useState(false);
+
+  useEffect(() => {
+    const isDark = document.documentElement.classList.contains('dark');
+    setIsDarkMode(isDark);
+  }, []);
+
+  const toggleDarkMode = () => {
+    const newDarkMode = !isDarkMode;
+    setIsDarkMode(newDarkMode);
+    if (newDarkMode) {
+      document.documentElement.classList.add('dark');
+      localStorage.setItem('theme', 'dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+      localStorage.setItem('theme', 'light');
+    }
+  };
+
+  const navItems = [
+    { label: "Plan Trip", href: "#", active: true },
+    { label: "My Trips", href: "#" },
+    { label: "Gas Stations", href: "#" },
+  ];
+
   return (
     <header className="sticky top-0 z-50 w-full border-b border-border/50 bg-background/80 backdrop-blur-lg">
       <div className="container flex h-16 items-center justify-between">
@@ -14,24 +42,95 @@ export function Header() {
             <p className="text-xs text-muted-foreground -mt-0.5">Smart travel planning</p>
           </div>
         </div>
+        
+        {/* Desktop Navigation */}
         <nav className="hidden md:flex items-center gap-6">
-          {/* <a href="#" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
-            Plan Trip */}
-          {/* </a>
-          <a href="#" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
-            My Trips
-          </a>
-          <a href="#" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
-            Gas Stations
-          </a> */}
-          {/* <Button variant="sunset" size="sm">
+          {navItems.map((item) => (
+            <a
+              key={item.label}
+              href={item.href}
+              className={cn(
+                "text-sm font-medium transition-colors hover:text-foreground",
+                item.active
+                  ? "text-foreground"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              {item.label}
+            </a>
+          ))}
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={toggleDarkMode}
+            className="ml-2"
+            title="Toggle dark mode"
+          >
+            {isDarkMode ? (
+              <Sun className="h-4 w-4" />
+            ) : (
+              <Moon className="h-4 w-4" />
+            )}
+          </Button>
+          <Button variant="sunset" size="sm">
             Sign In
-          </Button> */}
+          </Button>
         </nav>
-        <Button variant="ghost" size="icon" className="md:hidden">
-          <Menu className="h-5 w-5" />
-        </Button>
+
+        {/* Mobile Menu Button */}
+        <div className="md:hidden flex items-center gap-2">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={toggleDarkMode}
+            title="Toggle dark mode"
+          >
+            {isDarkMode ? (
+              <Sun className="h-4 w-4" />
+            ) : (
+              <Moon className="h-4 w-4" />
+            )}
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+            aria-label="Toggle menu"
+          >
+            {isMobileMenuOpen ? (
+              <X className="h-5 w-5" />
+            ) : (
+              <Menu className="h-5 w-5" />
+            )}
+          </Button>
+        </div>
       </div>
+
+      {/* Mobile Navigation */}
+      {isMobileMenuOpen && (
+        <div className="md:hidden border-t border-border/50 bg-background/95 backdrop-blur-lg">
+          <nav className="container py-4 space-y-3">
+            {navItems.map((item) => (
+              <a
+                key={item.label}
+                href={item.href}
+                className={cn(
+                  "block py-2 text-sm font-medium transition-colors hover:text-foreground",
+                  item.active
+                    ? "text-foreground"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+                onClick={() => setIsMobileMenuOpen(false)}
+              >
+                {item.label}
+              </a>
+            ))}
+            <Button variant="sunset" size="sm" className="w-full mt-4">
+              Sign In
+            </Button>
+          </nav>
+        </div>
+      )}
     </header>
   );
 }
