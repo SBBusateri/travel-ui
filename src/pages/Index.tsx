@@ -5,12 +5,21 @@ import { Button } from "@/components/ui/button";
 import { Navigation, Sparkles } from "lucide-react";
 import { useState } from "react";
 
-const Index = () => {
-  const [vehicleData, setVehicleData] = useState<any>(null);
+type VehicleData = {
+  adjustedRange?: number;
+  mpg?: number;
+  [key: string]: unknown;
+};
 
-  const handleVehicleChange = (data: any) => {
+const Index = () => {
+  const [vehicleData, setVehicleData] = useState<VehicleData | null>(null);
+
+  const handleVehicleChange = (data: VehicleData) => {
     setVehicleData(data);
   };
+
+  // Extract MPG from vehicle data for gas predictions
+  const vehicleMPG = vehicleData?.mpg || 25; // Fallback to 25 MPG
 
   return (
     <div className="min-h-screen hero-bg">
@@ -35,7 +44,7 @@ const Index = () => {
       {/* Main Content */}
       <section className="container pb-20 px-4">
         <div className="max-w-7xl mx-auto">
-          <RouteSection adjustedRange={vehicleData?.adjustedRange} onVehicleDataChange={setVehicleData} />
+          <RouteSection adjustedRange={vehicleData?.adjustedRange} vehicleMPG={vehicleMPG} onVehicleDataChange={setVehicleData} />
         </div>
 
         {/* Calculate Button */}
@@ -52,9 +61,9 @@ const Index = () => {
         </div>
 
         {/* Alternative Travel Section - Full Width */}
-        <div className="max-w-7xl mx-auto mt-12 px-4">
+        {/* <div className="max-w-7xl mx-auto mt-12 px-4">
           <AlternativeTravel />
-        </div>
+        </div> */}
       </section>
 
       {/* Footer */}

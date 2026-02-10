@@ -80,8 +80,22 @@ export function VehicleSelector({ onVehicleChange }: VehicleSelectorProps) {
   useEffect(() => {
     if (vehicleInfo) {
       onVehicleChange?.(vehicleInfo);
+    } else if (!year && !make && !model) {
+      // Default to Ford Mustang 2026 for testing when no vehicle selected
+      const defaultVehicle = {
+        year: 2026,
+        make: 'Ford',
+        model: 'Mustang',
+        mpg: 30,
+        gasType: 'Regular',
+        gasTankSize: 15,
+        adjustedRange: 450, // 30 MPG * 15 gallons
+        horsepower: 480,
+        batteryLife: null
+      };
+      onVehicleChange?.(defaultVehicle);
     }
-  }, [vehicleInfo, onVehicleChange]);
+  }, [vehicleInfo, onVehicleChange, year, make, model]);
 
   const loadYears = async () => {
     try {
@@ -282,18 +296,20 @@ export function VehicleSelector({ onVehicleChange }: VehicleSelectorProps) {
       </div>
 
       {/* Vehicle Info Display - More Compact */}
-      {vehicleInfo && (
+      {(vehicleInfo || (!year && !make && !model)) && (
         <div className="p-3 rounded-lg bg-primary/5 border border-primary/20 animate-fade-in">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-foreground">Vehicle Selected</p>
+              <p className="text-sm font-medium text-foreground">
+                {vehicleInfo ? 'Vehicle Selected' : 'Default Vehicle'}
+              </p>
               <p className="text-xs text-muted-foreground">
-                {year} {make} {model}
+                {vehicleInfo ? `${year} ${make} ${model}` : '2026 Ford Mustang'}
               </p>
             </div>
             <div className="text-right">
               <p className="text-lg font-bold text-primary">
-                {vehicleInfo.adjustedRange || '—'}
+                {vehicleInfo?.adjustedRange || 450}
               </p>
               <p className="text-xs text-muted-foreground">mile range</p>
             </div>
