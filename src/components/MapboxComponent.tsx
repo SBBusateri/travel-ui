@@ -109,13 +109,13 @@ class FullscreenControl {
   }
 }
 
-// Global rate limiter for Mapbox API calls
+// Global rate limiter for Mapbox API calls - MUCH stricter
 class RateLimiter {
   private calls: number[] = [];
   private readonly maxCallsPerSecond: number;
   private readonly maxCallsPerMinute: number;
 
-  constructor(maxCallsPerSecond = 25, maxCallsPerMinute = 600) {
+  constructor(maxCallsPerSecond = 5, maxCallsPerMinute = 100) {
     this.maxCallsPerSecond = maxCallsPerSecond;
     this.maxCallsPerMinute = maxCallsPerMinute;
   }
@@ -131,6 +131,7 @@ class RateLimiter {
       const oldestCall = Math.min(...this.calls);
       const waitTime = 60000 - (now - oldestCall);
       if (waitTime > 0) {
+        console.log(`Rate limit: Waiting ${waitTime}ms for per-minute limit`);
         await new Promise(resolve => setTimeout(resolve, waitTime));
       }
     }
@@ -138,12 +139,34 @@ class RateLimiter {
     // Check per-second limit
     const recentCalls = this.calls.filter(callTime => now - callTime < 1000);
     if (recentCalls.length >= this.maxCallsPerSecond) {
+      console.log(`Rate limit: Waiting 1000ms for per-second limit`);
       await new Promise(resolve => setTimeout(resolve, 1000));
     }
     
     this.calls.push(Date.now());
+    console.log(`Rate limit: API call #${this.calls.length} in last minute, ${recentCalls.length + 1} in last second`);
   }
 }
+
+// API response cache to prevent duplicate calls
+const apiCache = new Map<string, { data: any; timestamp: number }>();
+const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+
+const normalizeCacheText = (value: string) => value.trim().toLowerCase().replace(/\s+/g, ' ');
+
+const getCachedData = (key: string) => {
+  const cached = apiCache.get(key);
+  if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
+    console.log(`Cache hit for: ${key}`);
+    return cached.data;
+  }
+  return null;
+};
+
+const setCachedData = (key: string, data: any) => {
+  apiCache.set(key, { data, timestamp: Date.now() });
+  console.log(`Cached data for: ${key}`);
+};
 
 const mapboxRateLimiter = new RateLimiter();
 
@@ -235,6 +258,7 @@ const MapboxComponent = forwardRef<MapboxComponentRef, Props>((props, ref) => {
   const endInputRef = useRef<NodeJS.Timeout>();
   const stopInputRefs = useRef<NodeJS.Timeout[]>([]);
   const isCalculatingRoute = useRef(false);
+  const lastRouteCalculation = useRef<number>(0);
 
   // Map control functions
   const zoomIn = () => {
@@ -259,9 +283,18 @@ const MapboxComponent = forwardRef<MapboxComponentRef, Props>((props, ref) => {
     }
   };
 
-  // Autocomplete function
+  // Autocomplete function with caching
   const getAutocompleteSuggestions = async (query: string, userCoords?: [number, number]): Promise<AutocompleteSuggestion[]> => {
     if (!query || query.length < 2) return [];
+ 
+    const normalizedQuery = normalizeCacheText(query);
+    const cacheKey = `autocomplete_${normalizedQuery}_${userCoords?.[0] || 'null'}_${userCoords?.[1] || 'null'}`;
+    
+    // Check cache first
+    const cachedData = getCachedData(cacheKey);
+    if (cachedData) {
+      return cachedData;
+    }
     
     try {
       setLoadingSuggestions(true);
@@ -269,18 +302,21 @@ const MapboxComponent = forwardRef<MapboxComponentRef, Props>((props, ref) => {
       // Wait for rate limiter
       await mapboxRateLimiter.waitForSlot();
       
-      // Simple search with proximity
-      const proximity = userCoords ? `&proximity=${userCoords[0]},${userCoords[1]}` : '';
-      const response = await fetch(
-        `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(query)}.json?access_token=${mapboxgl.accessToken}&limit=5&autocomplete=true${proximity}`
-      );
+      const url = userCoords
+        ? `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(query)}.json?proximity=${userCoords[0]},${userCoords[1]}&limit=5&access_token=${mapboxgl.accessToken}`
+        : `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(query)}.json?limit=5&access_token=${mapboxgl.accessToken}`;
+
+      const response = await fetch(url);
       const data = await response.json();
       
-      const suggestions = data.features?.slice(0, 3).map((feature: any) => ({
+      const suggestions = data.features.map((feature: any) => ({
+        text: feature.text,
         place_name: feature.place_name,
         center: feature.center,
-        text: feature.text
-      })) || [];
+      }));
+      
+      // Cache the results
+      setCachedData(cacheKey, suggestions);
       
       return suggestions;
     } catch (error) {
@@ -294,11 +330,18 @@ const MapboxComponent = forwardRef<MapboxComponentRef, Props>((props, ref) => {
   // Address validation with coordinate validation
   const validateAddress = async (address: string): Promise<[number, number] | null> => {
     try {
+      const normalizedAddress = normalizeCacheText(address);
+      const cacheKey = `validate_${normalizedAddress}`;
+      const cached = getCachedData(cacheKey);
+      if (cached) {
+        return cached as [number, number];
+      }
+
       // Wait for rate limiter
       await mapboxRateLimiter.waitForSlot();
       
       const response = await fetch(
-        `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(address)}.json?access_token=${mapboxgl.accessToken}&limit=1`
+        `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(normalizedAddress)}.json?access_token=${mapboxgl.accessToken}&limit=1`
       );
       const data = await response.json();
       
@@ -312,6 +355,7 @@ const MapboxComponent = forwardRef<MapboxComponentRef, Props>((props, ref) => {
           return null;
         }
         
+        setCachedData(cacheKey, coords);
         return coords;
       }
       return null;
@@ -331,6 +375,20 @@ const MapboxComponent = forwardRef<MapboxComponentRef, Props>((props, ref) => {
           
           // Reverse geocode to get address
           try {
+            const cacheKey = `reverse_${currentLocation[0].toFixed(5)}_${currentLocation[1].toFixed(5)}`;
+            const cached = getCachedData(cacheKey);
+            if (cached) {
+              const address = cached as string;
+              setStartInput(address);
+              onStartLocationChanged?.(address);
+              setStartError("");
+
+              if (map) {
+                map.flyTo({ center: currentLocation, zoom: 12 });
+              }
+              return;
+            }
+
             // Wait for rate limiter
             await mapboxRateLimiter.waitForSlot();
             
@@ -340,6 +398,7 @@ const MapboxComponent = forwardRef<MapboxComponentRef, Props>((props, ref) => {
             const data = await response.json();
             if (data.features && data.features.length > 0) {
               const address = data.features[0].place_name;
+              setCachedData(cacheKey, address);
               setStartInput(address);
               onStartLocationChanged?.(address);
               setStartError("");
@@ -374,12 +433,12 @@ const MapboxComponent = forwardRef<MapboxComponentRef, Props>((props, ref) => {
     }
     
     if (value.length >= 2) {
-      // Debounce API call by 500ms
+      // Debounce API call by 1000ms (increased from 500ms)
       startInputRef.current = setTimeout(async () => {
         const suggestions = await getAutocompleteSuggestions(value, userLocation);
         setStartSuggestions(suggestions);
         setShowStartSuggestions(suggestions.length > 0);
-      }, 500);
+      }, 1000);
     } else {
       setStartSuggestions([]);
       setShowStartSuggestions(false);
@@ -397,12 +456,12 @@ const MapboxComponent = forwardRef<MapboxComponentRef, Props>((props, ref) => {
     }
     
     if (value.length >= 2) {
-      // Debounce API call by 500ms
+      // Debounce API call by 1000ms (increased from 500ms)
       endInputRef.current = setTimeout(async () => {
         const suggestions = await getAutocompleteSuggestions(value, userLocation);
         setEndSuggestions(suggestions);
         setShowEndSuggestions(suggestions.length > 0);
-      }, 500);
+      }, 1000);
     } else {
       setEndSuggestions([]);
       setShowEndSuggestions(false);
@@ -447,7 +506,7 @@ const MapboxComponent = forwardRef<MapboxComponentRef, Props>((props, ref) => {
     }
     
     if (value.length >= 2) {
-      // Debounce API call by 500ms
+      // Debounce API call by 1000ms (increased from 500ms)
       stopInputRefs.current[index] = setTimeout(async () => {
         const suggestions = await getAutocompleteSuggestions(value, userLocation);
         const newStopSuggestions = [...stopSuggestions];
@@ -457,7 +516,7 @@ const MapboxComponent = forwardRef<MapboxComponentRef, Props>((props, ref) => {
         const newShowSuggestions = [...showStopSuggestions];
         newShowSuggestions[index] = suggestions.length > 0;
         setShowStopSuggestions(newShowSuggestions);
-      }, 500);
+      }, 1000);
     } else {
       const newStopSuggestions = [...stopSuggestions];
       newStopSuggestions[index] = [];
@@ -575,7 +634,32 @@ const MapboxComponent = forwardRef<MapboxComponentRef, Props>((props, ref) => {
         return;
       }
 
-      // Wait for rate limiter again for directions API
+      const directionsCacheKey = `directions_${startCoords[0].toFixed(5)}_${startCoords[1].toFixed(5)}_${endCoords[0].toFixed(5)}_${endCoords[1].toFixed(5)}`;
+      const cachedDirections = getCachedData(directionsCacheKey);
+      if (cachedDirections) {
+        const route = (cachedDirections as any).routes[0];
+        const line = turf.lineString(route.geometry.coordinates);
+        drawRoute(line);
+
+        const gasStops = await predictGasStops(line, route.distance / 1609.34);
+        drawGasMarkers(gasStops);
+        onGasStopsCalculated?.(gasStops);
+        onDistanceCalculated?.(route.distance / 1609.34);
+
+        if (map) {
+          const bounds = new mapboxgl.LngLatBounds();
+          route.geometry.coordinates.forEach((coord: [number, number]) => {
+            bounds.extend(coord);
+          });
+          map.fitBounds(bounds, { padding: 50 });
+        }
+
+        setIsLoading(false);
+        isCalculatingRoute.current = false;
+        return;
+      }
+
+      // Wait for rate limiter for directions API
       await mapboxRateLimiter.waitForSlot();
 
       const directionsUrl = `https://api.mapbox.com/directions/v5/mapbox/driving/${startCoords[0]},${startCoords[1]};${endCoords[0]},${endCoords[1]}?geometries=geojson&overview=full&access_token=${mapboxgl.accessToken}`;
@@ -602,6 +686,8 @@ const MapboxComponent = forwardRef<MapboxComponentRef, Props>((props, ref) => {
 
       const route = data.routes[0];
       console.log('Route calculated successfully:', route);
+
+      setCachedData(directionsCacheKey, data);
 
       const line = turf.lineString(route.geometry.coordinates);
       drawRoute(line);
@@ -677,98 +763,165 @@ const MapboxComponent = forwardRef<MapboxComponentRef, Props>((props, ref) => {
     routeLine: Feature<LineString>,
     totalDistanceMiles: number
   ): Promise<GasStop[]> {
-    console.log('Predicting gas stops for route:', totalDistanceMiles, 'miles');
-    
-    const SAFE_BUFFER = 15;
-    const safeRange = (vehicleRangeMiles || adjustedRange || 300) - SAFE_BUFFER;
-    
-    console.log('Vehicle range:', vehicleRangeMiles || adjustedRange || 300);
-    console.log('Safe range after buffer:', safeRange);
+    const range = vehicleRangeMiles || adjustedRange || 300;
+    const adjusted = Math.max(50, range - 50);
+
+    // Window around the target (miles)
+    const WINDOW_BEFORE = 20;
+    const WINDOW_AFTER = 10;
+
+    // Hard cap to avoid infinite loops
+    const MAX_STOPS = 10;
 
     const stops: GasStop[] = [];
-    let nextStopAt = safeRange;
-    let traveled = 0;
 
-    const coords = routeLine.geometry.coordinates;
-    console.log('Route coordinates count:', coords.length);
+    // If we can make it without stops, don't search at all
+    if (totalDistanceMiles <= adjusted) {
+      return stops;
+    }
 
-    for (let i = 0; i < coords.length - 1; i++) {
-      const seg = turf.distance(
-        turf.point(coords[i]),
-        turf.point(coords[i + 1]),
-        { units: "miles" }
+    // Helper to get a coordinate along the route at a specific mile marker
+    const alongCoord = (milesFromStart: number): [number, number] => {
+      const clamped = Math.max(0, Math.min(totalDistanceMiles, milesFromStart));
+      const pt = turf.along(routeLine as any, clamped, { units: 'miles' }) as any;
+      return pt.geometry.coordinates as [number, number];
+    };
+
+    // 1) First stop: closest gas station near the start
+    const startCoord = alongCoord(0);
+    const firstStop = await findBestGasStation(routeLine, startCoord, 0, 0, adjusted + WINDOW_AFTER);
+    if (firstStop) {
+      stops.push(firstStop);
+    }
+
+    // Track how far along the route we are (in miles from start)
+    let lastStopMile = firstStop?.distanceFromStart ?? 0;
+
+    // 2) Repeatedly step forward by adjusted range and search near that target.
+    // IMPORTANT: keep API calls under control => at most 1 POI request per stop.
+    while (stops.length < MAX_STOPS) {
+      const remaining = totalDistanceMiles - lastStopMile;
+      if (remaining <= adjusted) {
+        break;
+      }
+
+      const targetMile = lastStopMile + adjusted;
+      // Clamp the target to the route length, then search near that point.
+      // The "window" is applied conceptually; with Mapbox POI we search nearest to the target.
+      const clampedTarget = Math.max(0, Math.min(totalDistanceMiles, targetMile));
+      const coord = alongCoord(clampedTarget);
+      const found = await findBestGasStation(
+        routeLine,
+        coord,
+        clampedTarget,
+        Math.max(0, clampedTarget - WINDOW_BEFORE),
+        Math.min(totalDistanceMiles, clampedTarget + WINDOW_AFTER)
       );
 
-      traveled += seg;
+      if (!found) {
+        break;
+      }
 
-      if (traveled >= nextStopAt && stops.length < 4) {
-        console.log(`Looking for gas station at mile ${traveled.toFixed(1)} (coord index ${i})`);
-        const gas = await findBestGasStation(coords[i + 1] as [number, number], traveled);
-        if (gas) {
-          console.log('Found gas station:', gas.name);
-          stops.push(gas);
-          nextStopAt += safeRange;
-        } else {
-          console.log('No gas station found, continuing...');
-        }
+      // distanceFromLast
+      const prevMile = lastStopMile;
+      found.distanceFromLast = Math.max(0, Math.round(found.distanceFromStart - prevMile));
+
+      stops.push(found);
+      lastStopMile = found.distanceFromStart;
+
+      // Defensive: if we didn't make progress, stop.
+      if (lastStopMile <= prevMile + 1) {
+        break;
       }
     }
 
-    console.log('Total gas stops found:', stops.length);
     return stops;
   }
 
   async function findBestGasStation(
+    routeLine: Feature<LineString>,
     position: [number, number],
-    distanceFromStart: number
+    targetMile: number,
+    minMile: number,
+    maxMile: number
   ): Promise<GasStop | null> {
     try {
-      console.log('Searching for gas stations near:', position);
-      
-      // Mapbox Geocoding API doesn't support POI searches like "gas station"
-      // Instead, we'll create mock gas stations along highways for demonstration
-      // In production, you'd use Google Places API or a dedicated gas station API
-      
-      // Generate mock gas station data based on position
-      const mockStations = [
-        {
-          id: `gas-${Date.now()}-1`,
-          name: "Shell Station",
-          text: "Shell Station",
-          place_name: "Shell Station, Highway Exit",
-          geometry: { coordinates: [position[0] + (Math.random() - 0.5) * 0.01, position[1] + (Math.random() - 0.5) * 0.01] }
-        },
-        {
-          id: `gas-${Date.now()}-2`,
-          name: "Chevron",
-          text: "Chevron",
-          place_name: "Chevron, Highway Exit",
-          geometry: { coordinates: [position[0] + (Math.random() - 0.5) * 0.01, position[1] + (Math.random() - 0.5) * 0.01] }
-        },
-        {
-          id: `gas-${Date.now()}-3`,
-          name: "BP",
-          text: "BP",
-          place_name: "BP Gas Station",
-          geometry: { coordinates: [position[0] + (Math.random() - 0.5) * 0.01, position[1] + (Math.random() - 0.5) * 0.01] }
+      const roundedLng = position[0].toFixed(4);
+      const roundedLat = position[1].toFixed(4);
+      const cacheKey = `gas_${roundedLng}_${roundedLat}_${Math.round(minMile)}_${Math.round(maxMile)}`;
+      const cached = getCachedData(cacheKey);
+      if (cached) {
+        const stop = cached as GasStop;
+        return {
+          ...stop,
+          distanceFromStart: Math.round(targetMile),
+        };
+      }
+
+      // Use Mapbox Geocoding POI search near the target coordinate.
+      // Note: results depend on Mapbox's POI coverage for the area.
+      await mapboxRateLimiter.waitForSlot();
+
+      const query = 'gas station';
+      const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(query)}.json?types=poi&proximity=${position[0]},${position[1]}&limit=5&autocomplete=false&access_token=${mapboxgl.accessToken}`;
+
+      const res = await fetchWithRetry(url);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.features && data.features.length > 0) {
+          // Choose a result that lands within [minMile, maxMile] along the route.
+          // This enforces: target range - 20 miles to +10 miles.
+          let bestFeature: any | null = null;
+          let bestAlongMile = 0;
+          let bestDelta = Number.POSITIVE_INFINITY;
+
+          for (const f of data.features) {
+            if (!f?.center) continue;
+            const p = turf.point(f.center);
+            const snapped = turf.nearestPointOnLine(routeLine as any, p, { units: 'miles' }) as any;
+            const along = typeof snapped?.properties?.location === 'number' ? snapped.properties.location : null;
+            if (along === null) continue;
+            if (along < minMile || along > maxMile) continue;
+
+            const delta = Math.abs(along - targetMile);
+            if (delta < bestDelta) {
+              bestDelta = delta;
+              bestFeature = f;
+              bestAlongMile = along;
+            }
+          }
+
+          // If none are within window, fall back to the closest-to-target POINT-wise
+          if (!bestFeature) {
+            const targetPt = turf.point(position);
+            let bestDist = Number.POSITIVE_INFINITY;
+            for (const f of data.features) {
+              if (!f?.center) continue;
+              const d = turf.distance(targetPt, turf.point(f.center), { units: 'miles' });
+              if (d < bestDist) {
+                bestDist = d;
+                bestFeature = f;
+              }
+            }
+            bestAlongMile = targetMile;
+          }
+
+          const stop: GasStop = {
+            id: bestFeature.id || `gas-${roundedLng}-${roundedLat}`,
+            name: bestFeature.text || bestFeature.place_name || 'Gas Station',
+            position: bestFeature.center as [number, number],
+            distanceFromStart: Math.round(bestAlongMile),
+            vicinity: bestFeature.place_name,
+            price: (Math.random() * 0.5 + 3.5).toFixed(2),
+            estimatedArrival: new Date(Date.now() + bestAlongMile * 60000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            fuelRemaining: Math.max(0, 50 - (bestAlongMile % 200)),
+          };
+
+          setCachedData(cacheKey, stop);
+          return stop;
         }
-      ];
+      }
 
-      // Select a random station from mock data
-      const best = mockStations[Math.floor(Math.random() * mockStations.length)];
-      
-      console.log('Selected mock gas station:', best);
-
-      return {
-        id: best.id,
-        name: best.name,
-        position: best.geometry.coordinates as [number, number],
-        distanceFromStart: Math.round(distanceFromStart),
-        vicinity: best.place_name,
-        price: (Math.random() * 0.5 + 3.5).toFixed(2), // Hardcoded price as requested
-        estimatedArrival: new Date(Date.now() + distanceFromStart * 60000).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
-        fuelRemaining: Math.max(0, 50 - (distanceFromStart % 200)) // Mock fuel remaining
-      };
     } catch (error) {
       console.error('Error finding gas station:', error);
       return null;
@@ -846,7 +999,7 @@ const MapboxComponent = forwardRef<MapboxComponentRef, Props>((props, ref) => {
 
   useImperativeHandle(ref, () => ({
     calculateRouteWithStops: () => {
-      if (start && end) {
+      if (startInput && endInput) {
         calculateRoute();
       }
     }
@@ -868,13 +1021,18 @@ const MapboxComponent = forwardRef<MapboxComponentRef, Props>((props, ref) => {
     }
     
     try {
-      const m = new mapboxgl.Map({
+      const m = new mapboxgl.Map(({
         container: "map",
-        style: "mapbox://styles/mapbox/navigation-day-v1",
+        style: "mapbox://styles/mapbox/streets-v12",
         center: [-90, 38],
         zoom: 4,
+        maxPitch: 0,
+        pitchWithRotate: false,
+        dragRotate: false,
+        // Reduce the number of extra vector tiles fetched ahead of time
+        prefetchZoomDelta: 0,
         attributionControl: false, // We'll add custom attribution
-      });
+      } as any));
 
       // Add navigation control (compass)
       m.addControl(new mapboxgl.NavigationControl(), 'top-right');
@@ -903,11 +1061,24 @@ const MapboxComponent = forwardRef<MapboxComponentRef, Props>((props, ref) => {
     }
   }, []);
 
+  // Sync state with props without triggering API calls
   useEffect(() => {
-    if (map && startInput && endInput && !isLoading) {
-      calculateRoute();
+    if (startLocationValue !== undefined && startLocationValue !== startInput) {
+      setStartInput(startLocationValue);
     }
-  }, [map, startInput, endInput]); // Remove calculateRoute from dependencies to prevent infinite loop
+  }, [startLocationValue]);
+
+  useEffect(() => {
+    if (endLocationValue !== undefined && endLocationValue !== endInput) {
+      setEndInput(endLocationValue);
+    }
+  }, [endLocationValue]);
+
+  useEffect(() => {
+    if (stopValues !== undefined && stopValues !== stopInputs) {
+      setStopInputs(stopValues);
+    }
+  }, [stopValues]);
 
   return (
     <div className="w-full h-full relative">
@@ -1095,6 +1266,7 @@ const MapboxComponent = forwardRef<MapboxComponentRef, Props>((props, ref) => {
               <span className="text-sm text-blue-600">Calculating route...</span>
             </div>
           )}
+
         </div>
       </div>
 

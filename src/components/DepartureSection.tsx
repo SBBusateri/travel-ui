@@ -45,7 +45,7 @@ export function DepartureSection() {
       {/* Separator Line */}
       <div className="border-t border-dashed border-border/1000 my-2" />
 
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-4">
         <div className="flex items-center gap-2">
           <div className="h-8 w-8 rounded-lg sunset-gradient flex items-center justify-center">
             <Clock className="h-4 w-4 text-primary-foreground" />
@@ -55,12 +55,12 @@ export function DepartureSection() {
           </div>
         </div>
         
-        {/* Leave Now Button - Top Left */}
+        {/* Leave Now Button - Responsive positioning */}
         <Button
           variant="outline"
           size="sm"
           onClick={handleLeaveNow}
-          className="text-xs h-7 px-2 border-border/50 hover:border-primary/30 hover:bg-primary/5"
+          className="text-xs h-7 px-2 border-border/50 hover:border-primary/30 hover:bg-primary/5 whitespace-nowrap"
         >
           <Zap className="h-3 w-3 mr-1" />
           Leave Now

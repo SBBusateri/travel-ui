@@ -1,8 +1,6 @@
 import { Header } from "@/components/Header";
 import { RouteSection } from "@/components/RouteSection";
 import { AlternativeTravel } from "@/components/AlternativeTravel";
-import { Button } from "@/components/ui/button";
-import { Navigation, Sparkles } from "lucide-react";
 import { useState } from "react";
 
 type VehicleData = {
@@ -44,20 +42,11 @@ const Index = () => {
       {/* Main Content */}
       <section className="container pb-20 px-4">
         <div className="max-w-7xl mx-auto">
-          <RouteSection adjustedRange={vehicleData?.adjustedRange} vehicleMPG={vehicleMPG} onVehicleDataChange={setVehicleData} />
-        </div>
-
-        {/* Calculate Button */}
-        <div className="max-w-7xl mx-auto mt-8 px-4">
-          <Button 
-            variant="sunset" 
-            size="xl" 
-            className="w-full md:w-auto md:min-w-[300px] mx-auto flex animate-slide-up"
-            disabled={!vehicleData || !vehicleData.adjustedRange}
-          >
-            <Navigation className="h-5 w-5 mr-2" />
-            Calculate My Trip
-          </Button>
+          <RouteSection 
+            adjustedRange={vehicleData?.adjustedRange} 
+            vehicleMPG={vehicleMPG} 
+            onVehicleDataChange={handleVehicleChange}
+          />
         </div>
 
         {/* Alternative Travel Section - Full Width */}

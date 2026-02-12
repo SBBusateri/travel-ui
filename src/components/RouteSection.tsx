@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useImperativeHandle, forwardRef } from "react";
 import { MapPin, Plus, X, Navigation, MoreVertical, Loader2, Car, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -32,13 +32,20 @@ interface Stop {
   location: string;
 }
 
+export interface RouteSectionRef {
+  calculateTrip: () => void;
+}
+
 interface RouteSectionProps {
   adjustedRange?: number;
   vehicleMPG?: number;
   onVehicleDataChange?: (data: VehicleData) => void;
+  onCalculateRoute?: () => void;
+  onStartLocationChanged?: (location: string) => void;
+  onEndLocationChanged?: (location: string) => void;
 }
 
-export function RouteSection({ adjustedRange: propAdjustedRange, vehicleMPG, onVehicleDataChange }: RouteSectionProps) {
+export const RouteSection = forwardRef<RouteSectionRef, RouteSectionProps>(({ adjustedRange: propAdjustedRange, vehicleMPG, onVehicleDataChange, onCalculateRoute, onStartLocationChanged, onEndLocationChanged }, ref) => {
   const [startLocation, setStartLocation] = useState("");
   const [endLocation, setEndLocation] = useState("");
   const [stops, setStops] = useState<Stop[]>([]);
@@ -50,10 +57,12 @@ export function RouteSection({ adjustedRange: propAdjustedRange, vehicleMPG, onV
 
   const handleStartLocationChange = (location: string) => {
     setStartLocation(location);
+    onStartLocationChanged?.(location);
   };
 
   const handleEndLocationChange = (location: string) => {
     setEndLocation(location);
+    onEndLocationChanged?.(location);
   };
 
   const handleGoClick = () => {
@@ -61,6 +70,17 @@ export function RouteSection({ adjustedRange: propAdjustedRange, vehicleMPG, onV
       mapRef.current?.calculateRouteWithStops();
     }
   };
+
+  const calculateTrip = () => {
+    if (startLocation && endLocation) {
+      mapRef.current?.calculateRouteWithStops();
+      onCalculateRoute?.();
+    }
+  };
+
+  useImperativeHandle(ref, () => ({
+    calculateTrip
+  }));
 
   const handleDistanceCalculated = (distanceMiles: number) => {
     setDistance(distanceMiles);
@@ -112,17 +132,18 @@ export function RouteSection({ adjustedRange: propAdjustedRange, vehicleMPG, onV
 
   return (
     <div className="travel-card space-y-6">
-      {/* Unified Container - Left: Vehicle/Departure (30%), Right: Map (70%) */}
-      <div className="flex flex-col lg:flex-row gap-6 h-[500px]">
-        {/* Left Side - Vehicle and Departure (30%) */}
+      {/* Main Container - Left: Inputs (30%), Right: Map (70%) */}
+      <div className="flex flex-col lg:flex-row gap-6">
+        {/* Left Side - All Inputs Container (30%) */}
         <div className="w-full lg:w-[30%] space-y-6">
-          <VehicleSelector onVehicleChange={onVehicleDataChange} />
-          <DepartureSection />
+          <div className="space-y-6">
+            <VehicleSelector onVehicleChange={onVehicleDataChange} />
+            <DepartureSection />
+          </div>
         </div>
 
         {/* Right Side - Map (70%) */}
         <div className="w-full lg:w-[70%] relative">
-          {/* Map Container */}
           <div className="h-[500px] rounded-xl overflow-hidden border border-border relative">
             <MapboxComponent
               ref={mapRef}
@@ -146,45 +167,83 @@ export function RouteSection({ adjustedRange: propAdjustedRange, vehicleMPG, onV
         </div>
       </div>
 
+      {/* Calculate My Trip Button */}
+      <div className="max-w-7xl mx-auto px-4">
+        <Button 
+          variant="sunset" 
+          size="xl" 
+          className="w-full md:w-auto md:min-w-[300px] mx-auto flex animate-slide-up"
+          disabled={!startLocation || !endLocation}
+          onClick={calculateTrip}
+        >
+          <Navigation className="h-5 w-5 mr-2" />
+          Calculate My Trip
+        </Button>
+      </div>
+
       {/* Route Summary */}
       {distance && (
-        <div className="travel-card space-y-4 animate-fade-in">
+        <div className="travel-card space-y-4 animate-fade-in mt-8">
           <div className="flex items-center gap-3">
             <div className="h-10 w-10 rounded-lg teal-gradient flex items-center justify-center">
               <Navigation className="h-5 w-5 text-primary-foreground" />
             </div>
             <div>
-              <h3 className="text-lg font-bold text-foreground">Route Summary</h3>
-              <p className="text-sm text-muted-foreground">Your journey details</p>
+              <h3 className="text-lg font-bold text-foreground">Trip Summary</h3>
+              <p className="text-sm text-muted-foreground">Your journey stops</p>
             </div>
           </div>
           
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
-            <div className="text-center p-3 md:p-4 rounded-lg bg-secondary/50">
-              <div className="flex items-center justify-center gap-2">
-                <div className="h-6 w-6 rounded-full bg-primary text-primary-foreground font-bold text-xs">A</div>
-                <p className="text-xs text-muted-foreground">Start</p>
-              </div>
-              <p className="text-xl md:text-2xl font-bold text-primary">{Math.ceil(distance)}</p>
-              <p className="text-xs text-muted-foreground">miles</p>
+          {/* Trip Stats */}
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+            <div className="text-center p-3 rounded-lg bg-secondary/30">
+              <p className="text-lg font-bold text-primary">{Math.ceil(distance)}</p>
+              <p className="text-xs text-muted-foreground">total miles</p>
             </div>
-            <div className="text-center p-3 md:p-4 rounded-lg bg-secondary/50">
-              <div className="flex items-center justify-center gap-2">
-                <div className="h-6 w-6 rounded-full bg-accent text-accent-foreground font-bold text-xs">B</div>
-                <p className="text-xs text-muted-foreground">Destination</p>
-              </div>
-            </div>
-            <div className="text-center p-3 md:p-4 rounded-lg bg-secondary/50">
-              <p className="text-xl md:text-2xl font-bold text-primary">{gasStops.length}</p>
+            <div className="text-center p-3 rounded-lg bg-secondary/30">
+              <p className="text-lg font-bold text-primary">{predictedGasStops.length}</p>
               <p className="text-xs text-muted-foreground">gas stops</p>
             </div>
-            <div className="text-center p-3 md:p-4 rounded-lg bg-secondary/50">
-              <p className="text-xl md:text-2xl font-bold text-primary">{propAdjustedRange || '—'}</p>
+            <div className="text-center p-3 rounded-lg bg-secondary/30">
+              <p className="text-lg font-bold text-primary">{propAdjustedRange || '—'}</p>
               <p className="text-xs text-muted-foreground">mile range</p>
             </div>
-            <div className="text-center p-3 md:p-4 rounded-lg bg-secondary/50">
-              <p className="text-xl md:text-2xl font-bold text-accent">{Math.round(distance / (propAdjustedRange || 1))}</p>
-              <p className="text-xs text-muted-foreground">refuels needed</p>
+          </div>
+
+          <div className="space-y-2 mt-4">
+            {/* Start Location */}
+            <div className="flex items-center gap-3 p-3 rounded-lg bg-secondary/50">
+              <div className="h-8 w-8 rounded-full bg-primary text-primary-foreground font-bold text-xs flex items-center justify-center">
+                A
+              </div>
+              <div className="flex-1">
+                <p className="font-medium text-foreground">Start</p>
+                <p className="text-sm text-muted-foreground">{startLocation || "Starting location"}</p>
+              </div>
+            </div>
+
+            {/* Gas Stops */}
+            {predictedGasStops.map((gasStop, index) => (
+              <div key={index} className="flex items-center gap-3 p-3 rounded-lg bg-secondary/50">
+                <div className="h-8 w-8 rounded-full bg-yellow-500 text-white font-bold text-xs flex items-center justify-center">
+                  {index + 1}
+                </div>
+                <div className="flex-1">
+                  <p className="font-medium text-foreground">{gasStop.name}</p>
+                  <p className="text-sm text-muted-foreground">{gasStop.vicinity}</p>
+                </div>
+              </div>
+            ))}
+
+            {/* Destination */}
+            <div className="flex items-center gap-3 p-3 rounded-lg bg-secondary/50">
+              <div className="h-8 w-8 rounded-full bg-accent text-accent-foreground font-bold text-xs flex items-center justify-center">
+                B
+              </div>
+              <div className="flex-1">
+                <p className="font-medium text-foreground">Destination</p>
+                <p className="text-sm text-muted-foreground">{endLocation || "Destination"}</p>
+              </div>
             </div>
           </div>
         </div>
@@ -247,4 +306,6 @@ export function RouteSection({ adjustedRange: propAdjustedRange, vehicleMPG, onV
       )}
     </div>
   );
-}
+});
+
+RouteSection.displayName = 'RouteSection';
