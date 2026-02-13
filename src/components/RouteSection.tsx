@@ -4,22 +4,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
-import MapboxComponent, { MapboxComponentRef } from "@/components/MapboxComponent";
-import { apiService } from "@/services/apiService";
 import { VehicleSelector } from "@/components/VehicleSelector";
 import { DepartureSection } from "@/components/DepartureSection";
-
-type GasStop = {
-  id: string;
-  name: string;
-  position: [number, number];
-  distanceFromStart: number;
-  distanceFromLast?: number;
-  vicinity?: string;
-  estimatedArrival?: string;
-  price?: string;
-  fuelRemaining?: number;
-};
 
 type VehicleData = {
   adjustedRange?: number;
@@ -45,15 +31,13 @@ interface RouteSectionProps {
   onEndLocationChanged?: (location: string) => void;
 }
 
-export const RouteSection = forwardRef<RouteSectionRef, RouteSectionProps>(({ adjustedRange: propAdjustedRange, vehicleMPG, onVehicleDataChange, onCalculateRoute, onStartLocationChanged, onEndLocationChanged }, ref) => {
+export const RouteSection = forwardRef<any, RouteSectionProps>(({ adjustedRange: propAdjustedRange, vehicleMPG, onVehicleDataChange, onCalculateRoute, onStartLocationChanged, onEndLocationChanged }, ref) => {
   const [startLocation, setStartLocation] = useState("");
   const [endLocation, setEndLocation] = useState("");
   const [stops, setStops] = useState<Stop[]>([]);
   const [distance, setDistance] = useState<number | null>(null);
-  const [gasStops, setGasStops] = useState<GasStop[]>([]);
-  const [predictedGasStops, setPredictedGasStops] = useState<GasStop[]>([]);
+  const [gasStops, setGasStops] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
-  const mapRef = useRef<MapboxComponentRef>(null);
 
   const handleStartLocationChange = (location: string) => {
     setStartLocation(location);
@@ -65,15 +49,9 @@ export const RouteSection = forwardRef<RouteSectionRef, RouteSectionProps>(({ ad
     onEndLocationChanged?.(location);
   };
 
-  const handleGoClick = () => {
-    if (startLocation && endLocation) {
-      mapRef.current?.calculateRouteWithStops();
-    }
-  };
-
   const calculateTrip = () => {
     if (startLocation && endLocation) {
-      mapRef.current?.calculateRouteWithStops();
+      // Just call onCalculateRoute since we don't have ref anymore
       onCalculateRoute?.();
     }
   };
@@ -86,22 +64,16 @@ export const RouteSection = forwardRef<RouteSectionRef, RouteSectionProps>(({ ad
     setDistance(distanceMiles);
   };
 
-  const handleGasStopsCalculated = (stops: GasStop[]) => {
+  const handleGasStopsCalculated = (stops: any[]) => {
     setGasStops(stops);
-  };
-
-  const handlePredictedGasStopsCalculated = (stops: GasStop[]) => {
-    setPredictedGasStops(stops);
   };
 
   const handleVehicleDataChange = (data: VehicleData) => {
     onVehicleDataChange?.(data);
   };
 
-  const handleStopChange = (index: number, location: string) => {
-    const newStops = [...stops];
-    newStops[index].location = location;
-    setStops(newStops);
+  const handleStopChange = (id: string, location: string) => {
+    setStops(stops.map((stop, index) => index.toString() === id ? { ...stop, location } : stop));
   };
 
   const handleAddStop = () => {
@@ -112,15 +84,15 @@ export const RouteSection = forwardRef<RouteSectionRef, RouteSectionProps>(({ ad
     setStops([...stops, newStop]);
   };
 
-  const handleRemoveStop = (index: number) => {
-    setStops(stops.filter((stop, i) => i !== index));
+  const handleRemoveStop = (id: string) => {
+    setStops(stops.filter((stop) => stop.id !== id));
   };
 
   const removeStop = (id: string) => {
     setStops(stops.filter((stop) => stop.id !== id));
     // Recalculate route if needed
     if (startLocation && endLocation) {
-      mapRef.current?.calculateRouteWithStops();
+      onCalculateRoute?.();
     }
   };
 
@@ -144,25 +116,11 @@ export const RouteSection = forwardRef<RouteSectionRef, RouteSectionProps>(({ ad
 
         {/* Right Side - Map (70%) */}
         <div className="w-full lg:w-[70%] relative">
-          <div className="h-[500px] rounded-xl overflow-hidden border border-border relative">
-            <MapboxComponent
-              ref={mapRef}
-              apiKey={import.meta.env.VITE_MAPBOX_TOKEN}
-              onDistanceCalculated={handleDistanceCalculated}
-              adjustedRange={propAdjustedRange}
-              vehicleMPG={vehicleMPG}
-              onGasStopsCalculated={handleGasStopsCalculated}
-              onPredictedGasStopsCalculated={handlePredictedGasStopsCalculated}
-              onStartLocationChanged={handleStartLocationChange}
-              onEndLocationChanged={handleEndLocationChange}
-              onStopChange={handleStopChange}
-              onAddStop={handleAddStop}
-              onRemoveStop={handleRemoveStop}
-              startLocationValue={startLocation}
-              endLocationValue={endLocation}
-              stopValues={stops.map(stop => stop.location)}
-              onGoClick={handleGoClick}
-            />
+          <div className="h-[500px] rounded-xl overflow-hidden border border-border relative flex items-center justify-center bg-gray-100">
+            <div className="text-center">
+              <h3 className="text-lg font-semibold text-gray-600 mb-2">Map Component Removed</h3>
+              <p className="text-gray-500">All map logic has been reset</p>
+            </div>
           </div>
         </div>
       </div>
@@ -201,7 +159,7 @@ export const RouteSection = forwardRef<RouteSectionRef, RouteSectionProps>(({ ad
               <p className="text-xs text-muted-foreground">total miles</p>
             </div>
             <div className="text-center p-3 rounded-lg bg-secondary/30">
-              <p className="text-lg font-bold text-primary">{predictedGasStops.length}</p>
+              <p className="text-lg font-bold text-primary">{gasStops.length}</p>
               <p className="text-xs text-muted-foreground">gas stops</p>
             </div>
             <div className="text-center p-3 rounded-lg bg-secondary/30">
@@ -223,14 +181,14 @@ export const RouteSection = forwardRef<RouteSectionRef, RouteSectionProps>(({ ad
             </div>
 
             {/* Gas Stops */}
-            {predictedGasStops.map((gasStop, index) => (
+            {gasStops.map((gasStop, index) => (
               <div key={index} className="flex items-center gap-3 p-3 rounded-lg bg-secondary/50">
                 <div className="h-8 w-8 rounded-full bg-yellow-500 text-white font-bold text-xs flex items-center justify-center">
                   {index + 1}
                 </div>
                 <div className="flex-1">
-                  <p className="font-medium text-foreground">{gasStop.name}</p>
-                  <p className="text-sm text-muted-foreground">{gasStop.vicinity}</p>
+                  <p className="font-medium text-foreground">Gas Stop {index + 1}</p>
+                  <p className="text-sm text-muted-foreground">{gasStop.vicinity || gasStop.name}</p>
                 </div>
               </div>
             ))}
@@ -250,7 +208,7 @@ export const RouteSection = forwardRef<RouteSectionRef, RouteSectionProps>(({ ad
       )}
 
       {/* Gas Stops List */}
-      {predictedGasStops.length > 0 && (
+      {gasStops.length > 0 && (
         <div className="travel-card space-y-4 animate-fade-in">
           <div className="flex items-center gap-3">
             <div className="h-10 w-10 rounded-lg sunset-gradient flex items-center justify-center">
@@ -263,7 +221,7 @@ export const RouteSection = forwardRef<RouteSectionRef, RouteSectionProps>(({ ad
           </div>
           
           <div className="space-y-3">
-            {predictedGasStops.map((gasStop, index) => (
+            {gasStops.map((gasStop, index) => (
               <div key={index} className="p-3 md:p-4 rounded-lg border border-border bg-card hover:border-primary/30 transition-colors">
                 <div className="flex flex-col md:flex-row md:justify-between md:items-start gap-3">
                   <div className="flex-1">

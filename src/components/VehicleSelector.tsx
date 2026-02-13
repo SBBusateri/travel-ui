@@ -104,7 +104,6 @@ export function VehicleSelector({ onVehicleChange }: VehicleSelectorProps) {
       const typeMap = { car: "cars", motorcycle: "motorcycles", rv: "rv", electric: "ev" };
       const data = await apiService.getYears(typeMap[selectedType as keyof typeof typeMap]);
       setYears(data);
-      console.log('Years loaded:', data);
     } catch (err) {
       console.error('Failed to load years:', err);
       // Provide fallback years
@@ -122,7 +121,6 @@ export function VehicleSelector({ onVehicleChange }: VehicleSelectorProps) {
       const typeMap = { car: "cars", motorcycle: "motorcycles", rv: "rv", electric: "ev" };
       const data = await apiService.getMakes(year, typeMap[selectedType as keyof typeof typeMap]);
       setMakes(data);
-      console.log('Makes loaded:', data);
     } catch (err) {
       console.error('Failed to load makes:', err);
       // Provide fallback makes based on vehicle type
@@ -146,7 +144,6 @@ export function VehicleSelector({ onVehicleChange }: VehicleSelectorProps) {
       const typeMap = { car: "cars", motorcycle: "motorcycles", rv: "rv", electric: "ev" };
       const data = await apiService.getModels(year, make, typeMap[selectedType as keyof typeof typeMap]);
       setModels(data);
-      console.log('Models loaded:', data);
     } catch (err) {
       console.error('Failed to load models:', err);
       // Provide fallback models based on make
@@ -182,7 +179,6 @@ export function VehicleSelector({ onVehicleChange }: VehicleSelectorProps) {
         type: typeMap[selectedType as keyof typeof typeMap]
       });
       setVehicleInfo(data);
-      console.log('Vehicle info loaded:', data);
     } catch (err) {
       console.error('Failed to fetch vehicle info:', err);
       // Provide fallback vehicle info based on type and make

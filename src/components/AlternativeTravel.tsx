@@ -187,7 +187,7 @@ export function AlternativeTravel() {
         </div>
         <div className="space-y-3">
           {trainOptions.map((option) => (
-            <TravelCard key={option.id} option={option} onSelect={() => console.log('Selected train:', option)} />
+            <TravelCard key={option.id} option={option} onSelect={() => {}} />
           ))}
         </div>
       </div>
@@ -200,7 +200,7 @@ export function AlternativeTravel() {
         </div>
         <div className="space-y-3">
           {flightOptions.map((option) => (
-            <TravelCard key={option.id} option={option} onSelect={() => console.log('Selected flight:', option)} />
+            <TravelCard key={option.id} option={option} onSelect={() => {}} />
           ))}
         </div>
       </div>
