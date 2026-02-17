@@ -95,7 +95,7 @@ export const RouteSection = forwardRef<RouteSectionRef, RouteSectionProps>(({ ad
               onRouteCalculated={handleRouteCalculated}
               className="w-full h-full"
             />
-            <div className="absolute top-4 left-4 z-10 w-[360px] max-w-[calc(100%-2rem)]">
+            <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10 w-full max-w-[40%] min-w-[220px] px-2">
               <MapControls
                 startLocation={startLocation}
                 destinationLocation={endLocation}

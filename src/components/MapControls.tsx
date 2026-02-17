@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type MutableRefObject } from 'react';
 import { v4 as uuidv4 } from 'uuid';
+import { LocateFixed } from 'lucide-react';
 import { MapLocation, MapControlsProps } from '@/types/googleMaps';
 
 type UiSuggestion = {
@@ -17,11 +18,16 @@ const MapControls = ({
   const [destinationInput, setDestinationInput] = useState('');
   const [startSuggestions, setStartSuggestions] = useState<UiSuggestion[]>([]);
   const [destinationSuggestions, setDestinationSuggestions] = useState<UiSuggestion[]>([]);
+  const [locating, setLocating] = useState<{ start: boolean; destination: boolean }>({
+    start: false,
+    destination: false
+  });
 
   const startDebounceRef = useRef<number | null>(null);
   const destinationDebounceRef = useRef<number | null>(null);
   const startRequestIdRef = useRef(0);
   const destinationRequestIdRef = useRef(0);
+  const geocoderRef = useRef<google.maps.Geocoder | null>(null);
 
   const sessionToken = useMemo(() => uuidv4(), []);
 
@@ -48,6 +54,79 @@ const MapControls = ({
       address: data.address,
       placeId
     };
+  };
+
+  const getGeocoder = () => {
+    if (typeof window === 'undefined' || !window.google?.maps?.Geocoder) {
+      throw new Error('Google Maps Geocoder is not available');
+    }
+
+    if (!geocoderRef.current) {
+      geocoderRef.current = new google.maps.Geocoder();
+    }
+
+    return geocoderRef.current;
+  };
+
+  const reverseGeocode = async (location: google.maps.LatLngLiteral): Promise<MapLocation> => {
+    const geocoder = getGeocoder();
+
+    return new Promise((resolve, reject) => {
+      geocoder.geocode({ location }, (results, status) => {
+        if (status === google.maps.GeocoderStatus.OK && results && results[0]) {
+          const result = results[0];
+          resolve({
+            lat: location.lat,
+            lng: location.lng,
+            address: result.formatted_address,
+            placeId: result.place_id
+          });
+        } else {
+          reject(new Error('Unable to determine your address.'));
+        }
+      });
+    });
+  };
+
+  const handleLocate = (type: 'start' | 'destination') => {
+    if (!navigator.geolocation) {
+      console.warn('Geolocation is not supported in this browser.');
+      return;
+    }
+
+    setLocating((prev) => ({ ...prev, [type]: true }));
+
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        try {
+          const { latitude, longitude } = position.coords;
+          const location = await reverseGeocode({ lat: latitude, lng: longitude });
+
+          if (type === 'start') {
+            setStartInput(location.address);
+            setStartSuggestions([]);
+            onStartLocationChange(location);
+          } else {
+            setDestinationInput(location.address);
+            setDestinationSuggestions([]);
+            onDestinationChange(location);
+          }
+        } catch (err) {
+          console.error('Locate me failed:', err);
+        } finally {
+          setLocating((prev) => ({ ...prev, [type]: false }));
+        }
+      },
+      (error) => {
+        console.error('Geolocation error:', error);
+        setLocating((prev) => ({ ...prev, [type]: false }));
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 0
+      }
+    );
   };
 
   const debounce = (callback: () => void, ref: MutableRefObject<number | null>) => {
@@ -146,20 +225,36 @@ const MapControls = ({
     };
   }, []);
 
+  const renderLocateButton = (type: 'start' | 'destination') => (
+    <button
+      type="button"
+      onClick={() => handleLocate(type)}
+      className="absolute right-2 top-1/2 -translate-y-1/2 inline-flex items-center justify-center rounded-full bg-white/70 hover:bg-white text-primary shadow transition-colors w-9 h-9"
+      aria-label={type === 'start' ? 'Use my current location for start' : 'Use my current location for destination'}
+    >
+      {locating[type] ? (
+        <span className="h-4 w-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+      ) : (
+        <LocateFixed className="h-4 w-4" />
+      )}
+    </button>
+  );
+
   return (
-    <div className="flex flex-col space-y-4 p-4 bg-white rounded-lg shadow-lg">
+    <div className="flex flex-col gap-2.5 p-3.5 rounded-2xl bg-white/10 backdrop-blur-xl shadow-2xl border border-white/30 text-slate-900">
       {/* START INPUT */}
       <div>
-        <label className="block text-sm font-medium mb-2">Starting Location</label>
         <div className="relative">
           <input
             value={startInput}
             onChange={(e) => handleStartChange(e.target.value)}
-            placeholder="Enter starting address..."
-            className="w-full px-4 py-2 border rounded-md"
+            placeholder="Starting location"
+            aria-label="Starting location"
+            className="w-full px-3 py-1.75 pr-9 rounded-xl border border-white/40 bg-white/35 text-sm text-slate-900 placeholder:text-slate-500 focus:bg-white/80 focus:border-primary shadow-sm transition"
           />
+          {renderLocateButton('start')}
           {startSuggestions.length > 0 && (
-            <div className="absolute z-10 w-full mt-1 bg-white border rounded-md shadow-lg max-h-60 overflow-y-auto">
+            <div className="absolute z-10 w-full mt-2 bg-white/85 backdrop-blur rounded-xl shadow-xl border border-white/60 max-h-60 overflow-y-auto animate-fade-in">
               {startSuggestions.map((s) => (
                 <div
                   key={s.placeId}
@@ -167,7 +262,7 @@ const MapControls = ({
                     event.preventDefault();
                     void selectStart(s);
                   }}
-                  className="px-4 py-2 hover:bg-gray-100 cursor-pointer"
+                  className="px-4 py-2 text-sm text-slate-800 hover:bg-primary/5 cursor-pointer transition"
                 >
                   {s.description}
                 </div>
@@ -179,16 +274,17 @@ const MapControls = ({
 
       {/* DESTINATION INPUT */}
       <div>
-        <label className="block text-sm font-medium mb-2">Destination</label>
         <div className="relative">
           <input
             value={destinationInput}
             onChange={(e) => handleDestinationChange(e.target.value)}
-            placeholder="Enter destination..."
-            className="w-full px-4 py-2 border rounded-md"
+            placeholder="Destination"
+            aria-label="Destination"
+            className="w-full px-3 py-1.75 pr-9 rounded-xl border border-white/40 bg-white/35 text-sm text-slate-900 placeholder:text-slate-500 focus:bg-white/80 focus:border-primary shadow-sm transition"
           />
+          {renderLocateButton('destination')}
           {destinationSuggestions.length > 0 && (
-            <div className="absolute z-10 w-full mt-1 bg-white border rounded-md shadow-lg max-h-60 overflow-y-auto">
+            <div className="absolute z-10 w-full mt-2 bg-white/85 backdrop-blur rounded-xl shadow-xl border border-white/60 max-h-60 overflow-y-auto animate-fade-in">
               {destinationSuggestions.map((s) => (
                 <div
                   key={s.placeId}
@@ -196,7 +292,7 @@ const MapControls = ({
                     event.preventDefault();
                     void selectDestination(s);
                   }}
-                  className="px-4 py-2 hover:bg-gray-100 cursor-pointer"
+                  className="px-4 py-2 text-sm text-slate-800 hover:bg-primary/5 cursor-pointer transition"
                 >
                   {s.description}
                 </div>

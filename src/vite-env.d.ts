@@ -12,13 +12,18 @@ declare global {
   namespace google {
     namespace maps {
       class Geocoder {
-        geocode(request: { address: string }, callback: (results: GeocoderResult[] | null, status: GeocoderStatus) => void): void;
+        geocode(
+          request: { address?: string; location?: LatLngLiteral },
+          callback: (results: GeocoderResult[] | null, status: GeocoderStatus) => void
+        ): void;
       }
       
       interface GeocoderResult {
         geometry: {
           location: LatLng;
         };
+        formatted_address?: string;
+        place_id?: string;
       }
       
       interface LatLng {

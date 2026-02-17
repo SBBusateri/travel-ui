@@ -6,7 +6,7 @@ interface GoogleMapsLoaderState {
   error: string | null;
 }
 
-const REQUIRED_LIBRARIES = ['maps', 'marker', 'places', 'routes'] as const;
+const REQUIRED_LIBRARIES = ['maps', 'marker', 'places', 'routes', 'geocoding'] as const;
 type RequiredLibrary = (typeof REQUIRED_LIBRARIES)[number];
 
 let optionsConfigured = false;
