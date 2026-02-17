@@ -42,6 +42,8 @@ declare global {
       interface MapOptions {
         center: LatLngLiteral;
         zoom: number;
+        mapTypeControl?: boolean;
+        streetViewControl?: boolean;
       }
       
       class DirectionsService {

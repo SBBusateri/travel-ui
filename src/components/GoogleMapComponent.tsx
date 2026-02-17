@@ -37,6 +37,8 @@ const GoogleMapComponent = ({
     const map = new google.maps.Map(mapRef.current, {
       center: { lat: 39.8283, lng: -98.5795 },
       zoom: 4,
+      mapTypeControl: false,
+      streetViewControl: false
     });
 
     mapInstanceRef.current = map;
