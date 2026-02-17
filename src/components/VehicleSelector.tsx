@@ -28,8 +28,18 @@ const vehicleOptions: VehicleOption[] = [
 ];
 
 interface VehicleSelectorProps {
-  onVehicleChange?: (data: any) => void;
+  onVehicleChange?: (data: VehicleData) => void;
 }
+
+type VehicleData = {
+  adjustedRange?: number;
+  mpg?: number;
+  horsepower?: number;
+  gasTankSize?: number;
+  gasType?: string;
+  baseRange?: number;
+  [key: string]: unknown;
+};
 
 export function VehicleSelector({ onVehicleChange }: VehicleSelectorProps) {
   const [selectedType, setSelectedType] = useState<VehicleType>("car");
@@ -43,7 +53,7 @@ export function VehicleSelector({ onVehicleChange }: VehicleSelectorProps) {
   const [models, setModels] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string>("");
-  const [vehicleInfo, setVehicleInfo] = useState<any>(null);
+  const [vehicleInfo, setVehicleInfo] = useState<VehicleData | null>(null);
 
   // Load years on mount
   useEffect(() => {

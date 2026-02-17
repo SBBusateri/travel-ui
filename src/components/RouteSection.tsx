@@ -6,6 +6,9 @@ import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { VehicleSelector } from "@/components/VehicleSelector";
 import { DepartureSection } from "@/components/DepartureSection";
+import GoogleMapComponent from "@/components/GoogleMapComponent";
+import MapControls from "@/components/MapControls";
+import { MapLocation, GasStop } from "@/types/googleMaps";
 
 type VehicleData = {
   adjustedRange?: number;
@@ -31,76 +34,45 @@ interface RouteSectionProps {
   onEndLocationChanged?: (location: string) => void;
 }
 
-export const RouteSection = forwardRef<any, RouteSectionProps>(({ adjustedRange: propAdjustedRange, vehicleMPG, onVehicleDataChange, onCalculateRoute, onStartLocationChanged, onEndLocationChanged }, ref) => {
-  const [startLocation, setStartLocation] = useState("");
-  const [endLocation, setEndLocation] = useState("");
+export const RouteSection = forwardRef<RouteSectionRef, RouteSectionProps>(({ adjustedRange: propAdjustedRange, vehicleMPG, onVehicleDataChange, onCalculateRoute, onStartLocationChanged, onEndLocationChanged }, ref) => {
+  const [startLocation, setStartLocation] = useState<MapLocation | null>(null);
+  const [endLocation, setEndLocation] = useState<MapLocation | null>(null);
   const [stops, setStops] = useState<Stop[]>([]);
   const [distance, setDistance] = useState<number | null>(null);
-  const [gasStops, setGasStops] = useState<any[]>([]);
+  const [duration, setDuration] = useState<string | null>(null);
+  const [gasStops, setGasStops] = useState<GasStop[]>([]);
   const [loading, setLoading] = useState(false);
 
-  const handleStartLocationChange = (location: string) => {
+  const handleStartLocationChange = (location: MapLocation | null) => {
     setStartLocation(location);
-    onStartLocationChanged?.(location);
+    onStartLocationChanged?.(location?.address || '');
   };
 
-  const handleEndLocationChange = (location: string) => {
+  const handleEndLocationChange = (location: MapLocation | null) => {
     setEndLocation(location);
-    onEndLocationChanged?.(location);
+    onEndLocationChanged?.(location?.address || '');
+  };
+
+  const handleRouteCalculated = (route: google.maps.DirectionsResult) => {
+    if (route && route.routes && route.routes[0]) {
+      const leg = route.routes[0].legs[0];
+      const distanceMiles = leg.distance.value / 1609.34; // Convert meters to miles
+      setDistance(distanceMiles);
+      setDuration(leg.duration?.text || null);
+    }
   };
 
   const calculateTrip = () => {
     if (startLocation && endLocation) {
-      // Just call onCalculateRoute since we don't have ref anymore
+      setLoading(true);
       onCalculateRoute?.();
+      setTimeout(() => setLoading(false), 1000);
     }
   };
 
   useImperativeHandle(ref, () => ({
     calculateTrip
   }));
-
-  const handleDistanceCalculated = (distanceMiles: number) => {
-    setDistance(distanceMiles);
-  };
-
-  const handleGasStopsCalculated = (stops: any[]) => {
-    setGasStops(stops);
-  };
-
-  const handleVehicleDataChange = (data: VehicleData) => {
-    onVehicleDataChange?.(data);
-  };
-
-  const handleStopChange = (id: string, location: string) => {
-    setStops(stops.map((stop, index) => index.toString() === id ? { ...stop, location } : stop));
-  };
-
-  const handleAddStop = () => {
-    const newStop: Stop = {
-      id: Date.now().toString(),
-      location: "",
-    };
-    setStops([...stops, newStop]);
-  };
-
-  const handleRemoveStop = (id: string) => {
-    setStops(stops.filter((stop) => stop.id !== id));
-  };
-
-  const removeStop = (id: string) => {
-    setStops(stops.filter((stop) => stop.id !== id));
-    // Recalculate route if needed
-    if (startLocation && endLocation) {
-      onCalculateRoute?.();
-    }
-  };
-
-  const updateStop = (id: string, location: string) => {
-    setStops(
-      stops.map((stop) => (stop.id === id ? { ...stop, location } : stop))
-    );
-  };
 
   return (
     <div className="travel-card space-y-6">
@@ -116,10 +88,20 @@ export const RouteSection = forwardRef<any, RouteSectionProps>(({ adjustedRange:
 
         {/* Right Side - Map (70%) */}
         <div className="w-full lg:w-[70%] relative">
-          <div className="h-[500px] rounded-xl overflow-hidden border border-border relative flex items-center justify-center bg-gray-100">
-            <div className="text-center">
-              <h3 className="text-lg font-semibold text-gray-600 mb-2">Map Component Removed</h3>
-              <p className="text-gray-500">All map logic has been reset</p>
+          <div className="h-[500px] rounded-xl overflow-hidden border border-border relative">
+            <GoogleMapComponent
+              startLocation={startLocation}
+              destinationLocation={endLocation}
+              onRouteCalculated={handleRouteCalculated}
+              className="w-full h-full"
+            />
+            <div className="absolute top-4 left-4 z-10 w-[360px] max-w-[calc(100%-2rem)]">
+              <MapControls
+                startLocation={startLocation}
+                destinationLocation={endLocation}
+                onStartLocationChange={handleStartLocationChange}
+                onDestinationChange={handleEndLocationChange}
+              />
             </div>
           </div>
         </div>
@@ -130,12 +112,21 @@ export const RouteSection = forwardRef<any, RouteSectionProps>(({ adjustedRange:
         <Button 
           variant="sunset" 
           size="xl" 
-          className="w-full md:w-auto md:min-w-[300px] mx-auto flex animate-slide-up"
-          disabled={!startLocation || !endLocation}
+          className={`w-full md:w-auto md:min-w-[300px] mx-auto flex animate-slide-up`}
+          disabled={loading || !startLocation || !endLocation}
           onClick={calculateTrip}
         >
-          <Navigation className="h-5 w-5 mr-2" />
-          Calculate My Trip
+          {loading ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Calculating Route...
+            </>
+          ) : (
+            <>
+              <Navigation className="h-5 w-5 mr-2" />
+              Calculate My Trip
+            </>
+          )}
         </Button>
       </div>
 
@@ -153,10 +144,14 @@ export const RouteSection = forwardRef<any, RouteSectionProps>(({ adjustedRange:
           </div>
           
           {/* Trip Stats */}
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <div className="text-center p-3 rounded-lg bg-secondary/30">
               <p className="text-lg font-bold text-primary">{Math.ceil(distance)}</p>
               <p className="text-xs text-muted-foreground">total miles</p>
+            </div>
+            <div className="text-center p-3 rounded-lg bg-secondary/30">
+              <p className="text-lg font-bold text-primary">{duration || '—'}</p>
+              <p className="text-xs text-muted-foreground">duration</p>
             </div>
             <div className="text-center p-3 rounded-lg bg-secondary/30">
               <p className="text-lg font-bold text-primary">{gasStops.length}</p>
@@ -170,15 +165,34 @@ export const RouteSection = forwardRef<any, RouteSectionProps>(({ adjustedRange:
 
           <div className="space-y-2 mt-4">
             {/* Start Location */}
+            {startLocation && (
+              <div className="flex items-center gap-3 p-3 rounded-lg bg-secondary/50">
+                <div className="h-8 w-8 rounded-full bg-primary text-primary-foreground font-bold text-xs flex items-center justify-center">
+                  A
+                </div>
+                <div className="flex-1">
+                  <p className="font-medium text-foreground">Start</p>
+                  <p className="text-sm text-muted-foreground">{startLocation.address}</p>
+                </div>
+              </div>
+            )}
+
+            {/* Destination */}
             <div className="flex items-center gap-3 p-3 rounded-lg bg-secondary/50">
-              <div className="h-8 w-8 rounded-full bg-primary text-primary-foreground font-bold text-xs flex items-center justify-center">
-                A
+                <div className="h-8 w-8 rounded-full bg-accent text-accent-foreground font-bold text-xs flex items-center justify-center">
+                  B
+                </div>
+                <div>
+                  {startLocation && endLocation && (
+                    <div>
+                      <div className="text-sm text-gray-600">From:</div>
+                      <div className="font-medium">{startLocation?.address || ''}</div>
+                      <div className="text-sm text-gray-600">To:</div>
+                      <div className="font-medium">{endLocation?.address || ''}</div>
+                    </div>
+                  )}
+                </div>
               </div>
-              <div className="flex-1">
-                <p className="font-medium text-foreground">Start</p>
-                <p className="text-sm text-muted-foreground">{startLocation || "Starting location"}</p>
-              </div>
-            </div>
 
             {/* Gas Stops */}
             {gasStops.map((gasStop, index) => (
@@ -198,9 +212,15 @@ export const RouteSection = forwardRef<any, RouteSectionProps>(({ adjustedRange:
               <div className="h-8 w-8 rounded-full bg-accent text-accent-foreground font-bold text-xs flex items-center justify-center">
                 B
               </div>
-              <div className="flex-1">
-                <p className="font-medium text-foreground">Destination</p>
-                <p className="text-sm text-muted-foreground">{endLocation || "Destination"}</p>
+              <div>
+                {startLocation && endLocation && (
+                  <div>
+                    <div className="text-sm text-gray-600">From:</div>
+                    <div className="font-medium">{startLocation?.address || ''}</div>
+                    <div className="text-sm text-gray-600">To:</div>
+                    <div className="font-medium">{endLocation?.address || ''}</div>
+                  </div>
+                )}
               </div>
             </div>
           </div>
