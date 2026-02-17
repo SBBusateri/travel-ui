@@ -37,11 +37,14 @@ export interface MapControlsProps {
   destinationLocation: MapLocation | null;
   onStartLocationChange: (location: MapLocation | null) => void;
   onDestinationChange: (location: MapLocation | null) => void;
+  stopLocation: MapLocation | null;
+  onStopChange: (location: MapLocation | null) => void;
 }
 
 export interface MapComponentProps {
   startLocation: MapLocation | null;
   destinationLocation: MapLocation | null;
+  stopLocation?: MapLocation | null;
   onRouteCalculated?: (route: google.maps.DirectionsResult) => void;
   onMapReady?: (map: google.maps.Map) => void;
   className?: string;

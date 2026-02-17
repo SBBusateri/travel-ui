@@ -1,10 +1,9 @@
-export interface MarkerCollection {
-  start?: google.maps.Marker;
-  destination?: google.maps.Marker;
-}
+type MarkerKey = 'start' | 'destination' | 'stop';
+
+export type MarkerCollection = Partial<Record<MarkerKey, google.maps.Marker>>;
 
 export const upsertMarker = (
-  key: 'start' | 'destination',
+  key: MarkerKey,
   location: { lat: number; lng: number } | null,
   map: google.maps.Map,
   markersRef: React.MutableRefObject<MarkerCollection>
@@ -24,10 +23,15 @@ export const upsertMarker = (
     existing.setMap(map);
     return;
   }
+  const titleMap: Record<MarkerKey, string> = {
+    start: 'Start',
+    destination: 'Destination',
+    stop: 'Stop'
+  };
 
   markersRef.current[key] = new google.maps.Marker({
     map,
     position: location,
-    title: key === 'start' ? 'Start' : 'Destination'
+    title: titleMap[key]
   });
 };

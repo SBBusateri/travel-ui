@@ -16,11 +16,6 @@ type VehicleData = {
   [key: string]: unknown;
 };
 
-interface Stop {
-  id: string;
-  location: string;
-}
-
 export interface RouteSectionRef {
   calculateTrip: () => void;
 }
@@ -37,7 +32,7 @@ interface RouteSectionProps {
 export const RouteSection = forwardRef<RouteSectionRef, RouteSectionProps>(({ adjustedRange: propAdjustedRange, vehicleMPG, onVehicleDataChange, onCalculateRoute, onStartLocationChanged, onEndLocationChanged }, ref) => {
   const [startLocation, setStartLocation] = useState<MapLocation | null>(null);
   const [endLocation, setEndLocation] = useState<MapLocation | null>(null);
-  const [stops, setStops] = useState<Stop[]>([]);
+  const [stopLocation, setStopLocation] = useState<MapLocation | null>(null);
   const [distance, setDistance] = useState<number | null>(null);
   const [duration, setDuration] = useState<string | null>(null);
   const [gasStops, setGasStops] = useState<GasStop[]>([]);
@@ -51,6 +46,10 @@ export const RouteSection = forwardRef<RouteSectionRef, RouteSectionProps>(({ ad
   const handleEndLocationChange = (location: MapLocation | null) => {
     setEndLocation(location);
     onEndLocationChanged?.(location?.address || '');
+  };
+
+  const handleStopChange = (location: MapLocation | null) => {
+    setStopLocation(location);
   };
 
   const handleRouteCalculated = (route: google.maps.DirectionsResult) => {
@@ -92,6 +91,7 @@ export const RouteSection = forwardRef<RouteSectionRef, RouteSectionProps>(({ ad
             <GoogleMapComponent
               startLocation={startLocation}
               destinationLocation={endLocation}
+              stopLocation={stopLocation}
               onRouteCalculated={handleRouteCalculated}
               className="w-full h-full"
             />
@@ -101,6 +101,8 @@ export const RouteSection = forwardRef<RouteSectionRef, RouteSectionProps>(({ ad
                 destinationLocation={endLocation}
                 onStartLocationChange={handleStartLocationChange}
                 onDestinationChange={handleEndLocationChange}
+                stopLocation={stopLocation}
+                onStopChange={handleStopChange}
               />
             </div>
           </div>

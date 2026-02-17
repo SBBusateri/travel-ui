@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type MutableRefObject } from 'react';
 import { v4 as uuidv4 } from 'uuid';
-import { LocateFixed } from 'lucide-react';
+import { LocateFixed, Plus, Trash2 } from 'lucide-react';
 import { MapLocation, MapControlsProps } from '@/types/googleMaps';
 
 type UiSuggestion = {
@@ -11,22 +11,30 @@ type UiSuggestion = {
 const MapControls = ({
   startLocation,
   destinationLocation,
+  stopLocation,
   onStartLocationChange,
-  onDestinationChange
+  onDestinationChange,
+  onStopChange
 }: MapControlsProps) => {
   const [startInput, setStartInput] = useState('');
   const [destinationInput, setDestinationInput] = useState('');
+  const [stopInput, setStopInput] = useState('');
   const [startSuggestions, setStartSuggestions] = useState<UiSuggestion[]>([]);
   const [destinationSuggestions, setDestinationSuggestions] = useState<UiSuggestion[]>([]);
-  const [locating, setLocating] = useState<{ start: boolean; destination: boolean }>({
+  const [stopSuggestions, setStopSuggestions] = useState<UiSuggestion[]>([]);
+  const [locating, setLocating] = useState<{ start: boolean; destination: boolean; stop: boolean }>({
     start: false,
-    destination: false
+    destination: false,
+    stop: false
   });
+  const [stopActive, setStopActive] = useState(Boolean(stopLocation));
 
   const startDebounceRef = useRef<number | null>(null);
   const destinationDebounceRef = useRef<number | null>(null);
+  const stopDebounceRef = useRef<number | null>(null);
   const startRequestIdRef = useRef(0);
   const destinationRequestIdRef = useRef(0);
+  const stopRequestIdRef = useRef(0);
   const geocoderRef = useRef<google.maps.Geocoder | null>(null);
 
   const sessionToken = useMemo(() => uuidv4(), []);
@@ -88,7 +96,7 @@ const MapControls = ({
     });
   };
 
-  const handleLocate = (type: 'start' | 'destination') => {
+  const handleLocate = (type: 'start' | 'destination' | 'stop') => {
     if (!navigator.geolocation) {
       console.warn('Geolocation is not supported in this browser.');
       return;
@@ -106,10 +114,15 @@ const MapControls = ({
             setStartInput(location.address);
             setStartSuggestions([]);
             onStartLocationChange(location);
-          } else {
+          } else if (type === 'destination') {
             setDestinationInput(location.address);
             setDestinationSuggestions([]);
             onDestinationChange(location);
+          } else {
+            setStopInput(location.address);
+            setStopSuggestions([]);
+            onStopChange(location);
+            setStopActive(true);
           }
         } catch (err) {
           console.error('Locate me failed:', err);
@@ -210,6 +223,44 @@ const MapControls = ({
     onDestinationChange(location);
   };
 
+  const handleStopChangeInput = (value: string) => {
+    setStopInput(value);
+    const trimmed = value.trim();
+
+    if (!trimmed) {
+      setStopSuggestions([]);
+      return;
+    }
+
+    if (trimmed.length < 3) {
+      setStopSuggestions([]);
+      return;
+    }
+
+    debounce(async () => {
+      const requestId = ++stopRequestIdRef.current;
+      try {
+        const suggestions = await fetchAutocomplete(trimmed);
+        if (stopRequestIdRef.current === requestId) {
+          setStopSuggestions(suggestions);
+        }
+      } catch (err) {
+        console.error('Stop autocomplete failed:', err);
+        if (stopRequestIdRef.current === requestId) {
+          setStopSuggestions([]);
+        }
+      }
+    }, stopDebounceRef);
+  };
+
+  const selectStop = async (suggestion: UiSuggestion) => {
+    const location = await fetchDetails(suggestion.placeId);
+    setStopInput(location.address);
+    setStopSuggestions([]);
+    onStopChange(location);
+    setStopActive(true);
+  };
+
   useEffect(() => {
     if (startLocation) setStartInput(startLocation.address);
   }, [startLocation]);
@@ -219,18 +270,36 @@ const MapControls = ({
   }, [destinationLocation]);
 
   useEffect(() => {
+    if (stopLocation) {
+      setStopActive(true);
+      setStopInput(stopLocation.address);
+    } else {
+      setStopInput('');
+      setStopSuggestions([]);
+      setStopActive(false);
+    }
+  }, [stopLocation]);
+
+  useEffect(() => {
     return () => {
       if (startDebounceRef.current) window.clearTimeout(startDebounceRef.current);
       if (destinationDebounceRef.current) window.clearTimeout(destinationDebounceRef.current);
+      if (stopDebounceRef.current) window.clearTimeout(stopDebounceRef.current);
     };
   }, []);
 
-  const renderLocateButton = (type: 'start' | 'destination') => (
+  const renderLocateButton = (type: 'start' | 'destination' | 'stop') => (
     <button
       type="button"
       onClick={() => handleLocate(type)}
       className="absolute right-2 top-1/2 -translate-y-1/2 inline-flex items-center justify-center rounded-full bg-white/70 hover:bg-white text-primary shadow transition-colors w-9 h-9"
-      aria-label={type === 'start' ? 'Use my current location for start' : 'Use my current location for destination'}
+      aria-label={
+        type === 'start'
+          ? 'Use my current location for start'
+          : type === 'destination'
+            ? 'Use my current location for destination'
+            : 'Use my current location for stop'
+      }
     >
       {locating[type] ? (
         <span className="h-4 w-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
@@ -241,7 +310,7 @@ const MapControls = ({
   );
 
   return (
-    <div className="flex flex-col gap-2.5 p-3.5 rounded-2xl bg-white/10 backdrop-blur-xl shadow-2xl border border-white/30 text-slate-900">
+    <div className="flex flex-col gap-3 p-4 rounded-2xl bg-white/20 backdrop-blur-xl shadow-2xl border border-white/30 text-slate-900">
       {/* START INPUT */}
       <div>
         <div className="relative">
@@ -250,7 +319,7 @@ const MapControls = ({
             onChange={(e) => handleStartChange(e.target.value)}
             placeholder="Starting location"
             aria-label="Starting location"
-            className="w-full px-3 py-1.75 pr-9 rounded-xl border border-white/40 bg-white/35 text-sm text-slate-900 placeholder:text-slate-500 focus:bg-white/80 focus:border-primary shadow-sm transition"
+            className="w-full px-3.5 py-2.5 pr-10 rounded-xl border border-white/40 bg-white/35 text-sm text-slate-900 placeholder:text-slate-500 focus:bg-white/90 focus:border-primary shadow-sm transition"
           />
           {renderLocateButton('start')}
           {startSuggestions.length > 0 && (
@@ -272,6 +341,84 @@ const MapControls = ({
         </div>
       </div>
 
+      {/* ADD STOP BUTTON */}
+      <div className="flex flex-col gap-1.5">
+        <button
+          type="button"
+          onClick={() => {
+            if (stopActive) {
+              onStopChange(null);
+              setStopInput('');
+              setStopSuggestions([]);
+              setStopActive(false);
+            } else {
+              setStopActive(true);
+            }
+          }}
+          className="w-full inline-flex items-center justify-between gap-2 text-sm font-medium text-slate-900 bg-white/35 hover:bg-white/60 px-3.5 py-1.75 rounded-xl transition"
+        >
+          <span className="inline-flex items-center gap-2">
+            <Plus className="h-3.5 w-3.5" />
+            Add stop
+          </span>
+        </button>
+      </div>
+
+      {/* STOP INPUT */}
+      {stopActive && (
+        <div>
+          <div className="relative">
+            <input
+              value={stopInput}
+              onChange={(e) => handleStopChangeInput(e.target.value)}
+              placeholder="Stop location"
+              aria-label="Trip stop"
+              className="w-full pl-10 pr-10 py-2.5 rounded-xl border border-white/40 bg-white/35 text-sm text-slate-900 placeholder:text-slate-500 focus:bg-white/90 focus:border-primary shadow-sm transition"
+            />
+            <div className="absolute left-2 top-1/2 -translate-y-1/2">
+              <Trash2
+                className="h-4 w-4 cursor-pointer text-slate-500 hover:text-destructive"
+                onClick={() => {
+                  onStopChange(null);
+                  setStopInput('');
+                  setStopSuggestions([]);
+                  setStopActive(false);
+                }}
+                aria-label="Remove stop"
+              />
+            </div>
+            <button
+              type="button"
+              onClick={() => handleLocate('stop')}
+              className="absolute right-2 top-1/2 -translate-y-1/2 inline-flex items-center justify-center rounded-full bg-white/70 hover:bg-white text-primary shadow transition-colors w-9 h-9"
+              aria-label="Use my current location for stop"
+            >
+              {locating.stop ? (
+                <span className="h-4 w-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+              ) : (
+                <LocateFixed className="h-4 w-4" />
+              )}
+            </button>
+            {stopSuggestions.length > 0 && (
+              <div className="absolute z-10 w-full mt-2 bg-white/85 backdrop-blur rounded-xl shadow-xl border border-white/60 max-h-60 overflow-y-auto animate-fade-in">
+                {stopSuggestions.map((s) => (
+                  <div
+                    key={s.placeId}
+                    onMouseDown={(event) => {
+                      event.preventDefault();
+                      void selectStop(s);
+                    }}
+                    className="px-4 py-2 text-sm text-slate-800 hover:bg-primary/5 cursor-pointer transition"
+                  >
+                    {s.description}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* DESTINATION INPUT */}
       <div>
         <div className="relative">
@@ -280,7 +427,7 @@ const MapControls = ({
             onChange={(e) => handleDestinationChange(e.target.value)}
             placeholder="Destination"
             aria-label="Destination"
-            className="w-full px-3 py-1.75 pr-9 rounded-xl border border-white/40 bg-white/35 text-sm text-slate-900 placeholder:text-slate-500 focus:bg-white/80 focus:border-primary shadow-sm transition"
+            className="w-full px-3.5 py-2.5 pr-10 rounded-xl border border-white/40 bg-white/35 text-sm text-slate-900 placeholder:text-slate-500 focus:bg-white/90 focus:border-primary shadow-sm transition"
           />
           {renderLocateButton('destination')}
           {destinationSuggestions.length > 0 && (

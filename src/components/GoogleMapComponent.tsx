@@ -7,6 +7,7 @@ import { upsertMarker, MarkerCollection } from '@/components/mapMarkers';
 interface GoogleMapComponentProps {
   startLocation: MapLocation | null;
   destinationLocation: MapLocation | null;
+  stopLocation?: MapLocation | null;
   onRouteCalculated?: (route: google.maps.DirectionsResult) => void;
   onMapReady?: (map: google.maps.Map) => void;
   className?: string;
@@ -15,6 +16,7 @@ interface GoogleMapComponentProps {
 const GoogleMapComponent = ({
   startLocation,
   destinationLocation,
+  stopLocation = null,
   onRouteCalculated,
   onMapReady,
   className = ''
@@ -70,9 +72,18 @@ const GoogleMapComponent = ({
       map,
       markersRef
     );
-  }, [startLocation, destinationLocation]);
 
-  // Calculate and render routes when both locations are available
+    upsertMarker(
+      'stop',
+      stopLocation
+        ? { lat: stopLocation.lat, lng: stopLocation.lng }
+        : null,
+      map,
+      markersRef
+    );
+  }, [startLocation, destinationLocation, stopLocation]);
+
+  // Calculate and render routes when inputs change
   useEffect(() => {
     const directionsService = directionsServiceRef.current;
     const directionsRenderer = directionsRendererRef.current;
@@ -87,14 +98,23 @@ const GoogleMapComponent = ({
 
     const origin = { lat: startLocation.lat, lng: startLocation.lng };
     const destination = { lat: destinationLocation.lat, lng: destinationLocation.lng };
-    const cacheKey = `${origin.lat},${origin.lng}|${destination.lat},${destination.lng}`;
+    const waypointList = stopLocation
+      ? [
+          {
+            location: { lat: stopLocation.lat, lng: stopLocation.lng },
+            stopover: true
+          }
+        ]
+      : undefined;
+
+    const cacheKey = `${origin.lat},${origin.lng}|${destination.lat},${destination.lng}|${stopLocation?.lat ?? ''},${stopLocation?.lng ?? ''}`;
 
     if (lastRouteRequestRef.current === cacheKey) return;
     lastRouteRequestRef.current = cacheKey;
 
     void (async () => {
       try {
-        const result = await calculateRoute(directionsService, origin, destination);
+        const result = await calculateRoute(directionsService, origin, destination, waypointList);
         directionsRenderer.setDirections(result);
         onRouteCalculated?.(result);
       } catch (err) {
@@ -102,7 +122,7 @@ const GoogleMapComponent = ({
         lastRouteRequestRef.current = null;
       }
     })();
-  }, [startLocation, destinationLocation, onRouteCalculated]);
+  }, [startLocation, destinationLocation, stopLocation, onRouteCalculated]);
 
   if (error) return <div className="p-4 text-red-500">{error}</div>;
   if (!isLoaded) return <div className="p-4">Loading map...</div>;
@@ -114,6 +134,7 @@ const GoogleMapComponent = ({
       style={{ minHeight: '400px' }}
     />
   );
-};
+}
+;
 
 export default GoogleMapComponent;
