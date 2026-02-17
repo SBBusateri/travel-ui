@@ -69,6 +69,23 @@ class ApiService {
     return response.json();
   }
 
+  async getGasStops(data: {
+    start: { lat: number; lng: number; address?: string };
+    destination: { lat: number; lng: number; address?: string };
+    adjustedRangeMiles: number;
+  }) {
+    const response = await fetch(`${API_BASE_URL}/routes/gas-stops`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(data)
+    });
+
+    if (!response.ok) throw new Error('Failed to compute gas stops');
+    return response.json();
+  }
+
   async checkHealth() {
     const response = await fetch(`${API_BASE_URL}/health`);
     if (!response.ok) throw new Error('Health check failed');

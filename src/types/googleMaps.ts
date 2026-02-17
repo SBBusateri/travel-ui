@@ -6,15 +6,16 @@ export interface MapLocation {
 }
 
 export interface GasStop {
-  id: string;
+  type: 'start' | 'fuel' | 'destination';
   name: string;
-  position: [number, number];
-  distanceFromStart: number;
-  distanceFromLast: number;
-  vicinity: string;
-  price: string;
-  estimatedArrival: string;
-  fuelRemaining: number;
+  address: string;
+  location: {
+    lat: number;
+    lng: number;
+  };
+  placeId?: string;
+  distanceFromStartMiles: number;
+  distanceFromLastMiles?: number;
 }
 
 export interface RouteData {
@@ -45,6 +46,7 @@ export interface MapComponentProps {
   startLocation: MapLocation | null;
   destinationLocation: MapLocation | null;
   stopLocation?: MapLocation | null;
+  fuelStops?: GasStop[];
   onRouteCalculated?: (route: google.maps.DirectionsResult) => void;
   onMapReady?: (map: google.maps.Map) => void;
   className?: string;

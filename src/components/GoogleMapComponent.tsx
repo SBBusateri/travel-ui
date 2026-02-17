@@ -1,6 +1,6 @@
 import { useRef, useEffect } from 'react';
 import { useGoogleMapsLoader } from '@/hooks/useGoogleMapsLoader';
-import { MapLocation } from '@/types/googleMaps';
+import { MapLocation, GasStop } from '@/types/googleMaps';
 import { calculateRoute } from '@/components/routeService';
 import { upsertMarker, MarkerCollection } from '@/components/mapMarkers';
 
@@ -8,6 +8,7 @@ interface GoogleMapComponentProps {
   startLocation: MapLocation | null;
   destinationLocation: MapLocation | null;
   stopLocation?: MapLocation | null;
+  fuelStops?: GasStop[];
   onRouteCalculated?: (route: google.maps.DirectionsResult) => void;
   onMapReady?: (map: google.maps.Map) => void;
   className?: string;
@@ -17,6 +18,7 @@ const GoogleMapComponent = ({
   startLocation,
   destinationLocation,
   stopLocation = null,
+  fuelStops = [],
   onRouteCalculated,
   onMapReady,
   className = ''
@@ -98,23 +100,35 @@ const GoogleMapComponent = ({
 
     const origin = { lat: startLocation.lat, lng: startLocation.lng };
     const destination = { lat: destinationLocation.lat, lng: destinationLocation.lng };
-    const waypointList = stopLocation
-      ? [
-          {
-            location: { lat: stopLocation.lat, lng: stopLocation.lng },
-            stopover: true
-          }
-        ]
-      : undefined;
+    const waypointList: google.maps.DirectionsWaypoint[] = [];
 
-    const cacheKey = `${origin.lat},${origin.lng}|${destination.lat},${destination.lng}|${stopLocation?.lat ?? ''},${stopLocation?.lng ?? ''}`;
+    if (stopLocation) {
+      waypointList.push({
+        location: { lat: stopLocation.lat, lng: stopLocation.lng },
+        stopover: true
+      });
+    }
+
+    fuelStops
+      ?.filter((stop) => stop.type === 'fuel')
+      .forEach((stop) => {
+        waypointList.push({
+          location: { lat: stop.location.lat, lng: stop.location.lng },
+          stopover: true
+        });
+      });
+
+    const cacheKey = `${origin.lat},${origin.lng}|${destination.lat},${destination.lng}|${stopLocation?.lat ?? ''},${stopLocation?.lng ?? ''}|${fuelStops
+      .filter((stop) => stop.type === 'fuel')
+      .map((stop) => `${stop.location.lat},${stop.location.lng}`)
+      .join(';')}`;
 
     if (lastRouteRequestRef.current === cacheKey) return;
     lastRouteRequestRef.current = cacheKey;
 
     void (async () => {
       try {
-        const result = await calculateRoute(directionsService, origin, destination, waypointList);
+        const result = await calculateRoute(directionsService, origin, destination, waypointList.length ? waypointList : undefined);
         directionsRenderer.setDirections(result);
         onRouteCalculated?.(result);
       } catch (err) {
@@ -122,7 +136,7 @@ const GoogleMapComponent = ({
         lastRouteRequestRef.current = null;
       }
     })();
-  }, [startLocation, destinationLocation, stopLocation, onRouteCalculated]);
+  }, [startLocation, destinationLocation, stopLocation, fuelStops, onRouteCalculated]);
 
   if (error) return <div className="p-4 text-red-500">{error}</div>;
   if (!isLoaded) return <div className="p-4">Loading map...</div>;
