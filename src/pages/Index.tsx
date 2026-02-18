@@ -33,8 +33,6 @@ const Index = () => {
             </span>
           </h1>
           <p className="text-base md:text-lg text-muted-foreground max-w-xl mx-auto">
-            Get personalized gas stop recommendations, compare travel alternatives, 
-            and optimize your journey with smart AI insights.
           </p>
         </div>
       </section>

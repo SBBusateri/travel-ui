@@ -354,6 +354,22 @@ const StopSummaryList = ({
     return stop.address || '';
   };
 
+  const getHoursDisplay = (stop: GasStop) => {
+    if (stop.type !== 'fuel') return null;
+    const status = typeof stop.isOpenNow === 'boolean'
+      ? stop.isOpenNow
+        ? 'Open now'
+        : 'Closed'
+      : null;
+    const hoursLine = stop.hours?.[0];
+
+    if (!status && !hoursLine) return null;
+    if (status && hoursLine) {
+      return `${status} • ${hoursLine}`;
+    }
+    return status ?? hoursLine ?? null;
+  };
+
   return (
     <div className="rounded-2xl border border-border bg-secondary/40 p-4">
       <div className="text-sm font-semibold text-muted-foreground mb-4">Stops & legs</div>
@@ -363,6 +379,7 @@ const StopSummaryList = ({
           const { label, classes } = getBadgeProps(stop);
           const title = getStopTitle(stop);
           const subtitle = getMetaLabel(stop);
+          const hoursDisplay = getHoursDisplay(stop);
           const showConnector = index < displayedStops.length - 1;
 
           return (
@@ -376,7 +393,12 @@ const StopSummaryList = ({
               <div className="rounded-xl bg-background border border-border/60 p-4">
                 <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
                   <div className="flex-1">
-                    <p className="font-semibold text-foreground leading-snug">{title}</p>
+                    <p className="font-semibold text-foreground leading-snug">
+                      {title}
+                      {hoursDisplay && (
+                        <span className="ml-2 text-xs font-normal text-muted-foreground">{hoursDisplay}</span>
+                      )}
+                    </p>
                     {subtitle && (
                       <p className="text-sm text-muted-foreground mt-0.5">{subtitle}</p>
                     )}
