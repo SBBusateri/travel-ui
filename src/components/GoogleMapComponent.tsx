@@ -2,7 +2,7 @@ import { useRef, useEffect } from 'react';
 import { useGoogleMapsLoader } from '@/hooks/useGoogleMapsLoader';
 import { MapLocation, GasStop } from '@/types/googleMaps';
 import { calculateRoute } from '@/components/routeService';
-import { upsertMarker, MarkerCollection } from '@/components/mapMarkers';
+import { upsertMarker, MarkerCollection, syncFuelStopMarkers } from '@/components/mapMarkers';
 
 interface GoogleMapComponentProps {
   startLocation: MapLocation | null;
@@ -47,7 +47,9 @@ const GoogleMapComponent = ({
 
     mapInstanceRef.current = map;
     directionsServiceRef.current = new google.maps.DirectionsService();
-    directionsRendererRef.current = new google.maps.DirectionsRenderer({ map });
+    const rendererOptions = { map, suppressMarkers: true } as google.maps.DirectionsRendererOptions;
+    const renderer = new google.maps.DirectionsRenderer(rendererOptions);
+    directionsRendererRef.current = renderer;
 
     onMapReady?.(map);
   }, [isLoaded, onMapReady]);
@@ -63,8 +65,35 @@ const GoogleMapComponent = ({
         ? { lat: startLocation.lat, lng: startLocation.lng }
         : null,
       map,
-      markersRef
+      markersRef,
+      {
+        label: 'S',
+        title: startLocation?.address ?? 'Start',
+        zIndex: 100
+      }
     );
+
+    let nextLabelIndex = 1;
+
+    if (stopLocation) {
+      upsertMarker(
+        'stop',
+        { lat: stopLocation.lat, lng: stopLocation.lng },
+        map,
+        markersRef,
+        {
+          label: String(nextLabelIndex),
+          title: stopLocation.address ?? 'Stopover',
+          zIndex: 90
+        }
+      );
+      nextLabelIndex += 1;
+    } else {
+      upsertMarker('stop', null, map, markersRef);
+    }
+
+    const fuelStopCount = (fuelStops ?? []).filter((stop) => stop.type === 'fuel').length;
+    const destinationLabel = String(nextLabelIndex + fuelStopCount);
 
     upsertMarker(
       'destination',
@@ -72,18 +101,22 @@ const GoogleMapComponent = ({
         ? { lat: destinationLocation.lat, lng: destinationLocation.lng }
         : null,
       map,
-      markersRef
+      markersRef,
+      {
+        label: destinationLabel,
+        title: destinationLocation?.address ?? 'Destination',
+        zIndex: 100
+      }
     );
+  }, [startLocation, destinationLocation, stopLocation, fuelStops]);
 
-    upsertMarker(
-      'stop',
-      stopLocation
-        ? { lat: stopLocation.lat, lng: stopLocation.lng }
-        : null,
-      map,
-      markersRef
-    );
-  }, [startLocation, destinationLocation, stopLocation]);
+  useEffect(() => {
+    const map = mapInstanceRef.current;
+    if (!map) return;
+
+    const startIndex = 1 + (stopLocation ? 1 : 0);
+    syncFuelStopMarkers(map, markersRef, fuelStops ?? [], startIndex);
+  }, [fuelStops, stopLocation]);
 
   // Calculate and render routes when inputs change
   useEffect(() => {
@@ -130,6 +163,9 @@ const GoogleMapComponent = ({
       try {
         const result = await calculateRoute(directionsService, origin, destination, waypointList.length ? waypointList : undefined);
         directionsRenderer.setDirections(result);
+        (directionsRenderer as google.maps.DirectionsRenderer & {
+          set?: (key: string, value: unknown) => void;
+        }).set?.('suppressMarkers', true);
         onRouteCalculated?.(result);
       } catch (err) {
         console.error('Route error:', err);

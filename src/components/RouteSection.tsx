@@ -28,6 +28,35 @@ interface RouteSectionProps {
 }
 
 const DEFAULT_ADJUSTED_RANGE_MILES = 300;
+const METERS_PER_MILE = 1609.34;
+
+const formatMilesDisplay = (value: number | null | undefined, decimals = 0) => {
+  if (value === null || value === undefined || Number.isNaN(value)) return '—';
+  const factor = 10 ** decimals;
+  const rounded = Math.round(value * factor) / factor;
+  return `${rounded.toFixed(decimals)} mi`;
+};
+
+const formatDurationFromSeconds = (seconds: number | null | undefined) => {
+  if (!seconds || seconds <= 0) return '—';
+  const totalMinutes = Math.round(seconds / 60);
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+
+  if (hours === 0 && minutes === 0) {
+    return '<1m';
+  }
+
+  if (hours === 0) {
+    return `${minutes}m`;
+  }
+
+  if (minutes === 0) {
+    return `${hours}h`;
+  }
+
+  return `${hours}h ${minutes}m`;
+};
 
 export const RouteSection = forwardRef<RouteSectionRef, RouteSectionProps>(({ adjustedRange: propAdjustedRange, vehicleMPG, onVehicleDataChange, onCalculateRoute, onStartLocationChanged, onEndLocationChanged }, ref) => {
   const [startLocation, setStartLocation] = useState<MapLocation | null>(null);
@@ -54,12 +83,16 @@ export const RouteSection = forwardRef<RouteSectionRef, RouteSectionProps>(({ ad
   };
 
   const handleRouteCalculated = (route: google.maps.DirectionsResult) => {
-    if (route && route.routes && route.routes[0]) {
-      const leg = route.routes[0].legs[0];
-      const distanceMiles = leg.distance.value / 1609.34; // Convert meters to miles
-      setDistance(distanceMiles);
-      setDuration(leg.duration?.text || null);
-    }
+    const primaryRoute = route?.routes?.[0];
+    const legs = primaryRoute?.legs ?? [];
+
+    if (!primaryRoute || !legs.length) return;
+
+    const totalDistanceMeters = legs.reduce((total, leg) => total + (leg.distance?.value ?? 0), 0);
+    const totalDurationSeconds = legs.reduce((total, leg) => total + (leg.duration?.value ?? 0), 0);
+
+    setDistance(totalDistanceMeters / METERS_PER_MILE);
+    setDuration(formatDurationFromSeconds(totalDurationSeconds));
   };
 
   const calculateTrip = async () => {
@@ -167,7 +200,7 @@ export const RouteSection = forwardRef<RouteSectionRef, RouteSectionProps>(({ ad
       </div>
 
       {/* Route Summary */}
-      {distance && (
+      {distance !== null && (
         <div className="travel-card space-y-4 animate-fade-in mt-8">
           <div className="flex items-center gap-3">
             <div className="h-10 w-10 rounded-lg teal-gradient flex items-center justify-center">
@@ -182,11 +215,11 @@ export const RouteSection = forwardRef<RouteSectionRef, RouteSectionProps>(({ ad
           {/* Trip Stats */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <div className="text-center p-3 rounded-lg bg-secondary/30">
-              <p className="text-lg font-bold text-primary">{Math.ceil(distance)}</p>
+              <p className="text-lg font-bold text-primary">{formatMilesDisplay(distance, 1)}</p>
               <p className="text-xs text-muted-foreground">total miles</p>
             </div>
             <div className="text-center p-3 rounded-lg bg-secondary/30">
-              <p className="text-lg font-bold text-primary">{duration || '—'}</p>
+              <p className="text-lg font-bold text-primary">{duration ?? '—'}</p>
               <p className="text-xs text-muted-foreground">duration</p>
             </div>
             <div className="text-center p-3 rounded-lg bg-secondary/30">
@@ -194,7 +227,7 @@ export const RouteSection = forwardRef<RouteSectionRef, RouteSectionProps>(({ ad
               <p className="text-xs text-muted-foreground">gas stops</p>
             </div>
             <div className="text-center p-3 rounded-lg bg-secondary/30">
-              <p className="text-lg font-bold text-primary">{lastUsedRange ?? propAdjustedRange ?? '—'}</p>
+              <p className="text-lg font-bold text-primary">{formatMilesDisplay(lastUsedRange ?? propAdjustedRange ?? null)}</p>
               <p className="text-xs text-muted-foreground">mile range</p>
             </div>
           </div>
@@ -231,7 +264,8 @@ const StopSummaryList = ({ startLocation, endLocation, gasStops, fallbackDistanc
       name: 'Start',
       address: startLocation.address,
       location: { lat: startLocation.lat, lng: startLocation.lng },
-      distanceFromStartMiles: 0
+      distanceFromStartMiles: 0,
+      distanceFromLastMiles: 0
     });
   }
 
@@ -241,7 +275,8 @@ const StopSummaryList = ({ startLocation, endLocation, gasStops, fallbackDistanc
       name: 'Destination',
       address: endLocation.address,
       location: { lat: endLocation.lat, lng: endLocation.lng },
-      distanceFromStartMiles: fallbackDistance ?? fallbackRange
+      distanceFromStartMiles: fallbackDistance ?? fallbackRange,
+      distanceFromLastMiles: fallbackDistance ?? fallbackRange
     });
   }
 
@@ -261,10 +296,33 @@ const StopSummaryList = ({ startLocation, endLocation, gasStops, fallbackDistanc
     return { label: `${fuelCounter}`, classes: 'bg-yellow-500 text-white' };
   };
 
+  const buildLine = (stop: GasStop) => {
+    const baseTitle = [stop.name, stop.address].filter(Boolean).join(' | ') || stop.name || 'Stop';
+
+    const detailParts: string[] = [];
+
+    if (stop.type === 'start') {
+      detailParts.push('Trip start');
+    } else if (stop.type === 'destination') {
+      detailParts.push('Arrive');
+    }
+
+    if (stop.type !== 'start' && typeof stop.distanceFromLastMiles === 'number') {
+      detailParts.push(`${formatMilesDisplay(stop.distanceFromLastMiles, 0)} from last stop`);
+    }
+
+    if (!detailParts.length) {
+      return baseTitle;
+    }
+
+    return `${baseTitle} — ${detailParts.join(' — ')}`;
+  };
+
   return (
     <div className="space-y-2 mt-4">
       {displayedStops.map((stop, index) => {
         const { label, classes } = getBadgeProps(stop);
+        const line = buildLine(stop);
 
         return (
           <div key={`${stop.type}-${index}`} className="flex items-center gap-3 p-3 rounded-lg bg-secondary/50">
@@ -272,8 +330,7 @@ const StopSummaryList = ({ startLocation, endLocation, gasStops, fallbackDistanc
               {label}
             </div>
             <div className="flex-1">
-              <p className="font-medium text-foreground">{stop.name}</p>
-              <p className="text-sm text-muted-foreground">{stop.address}</p>
+              <p className="font-medium text-foreground leading-snug">{line}</p>
             </div>
           </div>
         );
