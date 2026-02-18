@@ -29,12 +29,18 @@ interface RouteSectionProps {
 
 const DEFAULT_ADJUSTED_RANGE_MILES = 300;
 const METERS_PER_MILE = 1609.34;
+const PLACEHOLDER_FUEL_PRICE = 3.5;
 
 const formatMilesDisplay = (value: number | null | undefined, decimals = 0) => {
   if (value === null || value === undefined || Number.isNaN(value)) return '—';
   const factor = 10 ** decimals;
   const rounded = Math.round(value * factor) / factor;
   return `${rounded.toFixed(decimals)} mi`;
+};
+
+const formatCurrency = (value: number | null | undefined) => {
+  if (value === null || value === undefined || Number.isNaN(value)) return '—';
+  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value);
 };
 
 const formatDurationFromSeconds = (seconds: number | null | undefined) => {
@@ -139,6 +145,15 @@ export const RouteSection = forwardRef<RouteSectionRef, RouteSectionProps>(({ ad
     calculateTrip
   }));
 
+  const fuelStopsOnly = gasStops.filter((stop) => stop.type === 'fuel');
+  const effectiveRangeMiles = lastUsedRange ?? propAdjustedRange ?? DEFAULT_ADJUSTED_RANGE_MILES;
+  const mpgValue = vehicleMPG ?? null;
+  const estimatedTankGallons = mpgValue ? effectiveRangeMiles / mpgValue : null;
+  const perFillCost = estimatedTankGallons !== null ? estimatedTankGallons * PLACEHOLDER_FUEL_PRICE : null;
+  const totalFuelCost = perFillCost !== null && fuelStopsOnly.length > 0
+    ? perFillCost * fuelStopsOnly.length
+    : null;
+
   return (
     <div className="travel-card space-y-6">
       {/* Main Container - Left: Inputs (30%), Right: Map (70%) */}
@@ -201,34 +216,51 @@ export const RouteSection = forwardRef<RouteSectionRef, RouteSectionProps>(({ ad
 
       {/* Route Summary */}
       {distance !== null && (
-        <div className="travel-card space-y-4 animate-fade-in mt-8">
-          <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-lg teal-gradient flex items-center justify-center">
-              <Navigation className="h-5 w-5 text-primary-foreground" />
+        <div className="space-y-6 animate-fade-in mt-8">
+          <div className="rounded-2xl border border-border bg-background text-foreground shadow-sm p-3">
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+              <div>
+                <p className="text-[10px] uppercase tracking-[0.25em] text-muted-foreground">Trip summary</p>
+                <h3 className="text-lg font-semibold leading-tight">Ready for the road</h3>
+                <p className="text-xs text-muted-foreground">Full itinerary with fuel confidence</p>
+              </div>
+              <div className="text-right">
+                <p className="text-[10px] text-muted-foreground uppercase">Total distance</p>
+                <p className="text-xl font-bold leading-tight">{formatMilesDisplay(distance, 1)}</p>
+              </div>
             </div>
-            <div>
-              <h3 className="text-lg font-bold text-foreground">Trip Summary</h3>
-              <p className="text-sm text-muted-foreground">Your journey stops</p>
-            </div>
-          </div>
-          
-          {/* Trip Stats */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <div className="text-center p-3 rounded-lg bg-secondary/30">
-              <p className="text-lg font-bold text-primary">{formatMilesDisplay(distance, 1)}</p>
-              <p className="text-xs text-muted-foreground">total miles</p>
-            </div>
-            <div className="text-center p-3 rounded-lg bg-secondary/30">
-              <p className="text-lg font-bold text-primary">{duration ?? '—'}</p>
-              <p className="text-xs text-muted-foreground">duration</p>
-            </div>
-            <div className="text-center p-3 rounded-lg bg-secondary/30">
-              <p className="text-lg font-bold text-primary">{gasStops.filter((stop) => stop.type === 'fuel').length}</p>
-              <p className="text-xs text-muted-foreground">gas stops</p>
-            </div>
-            <div className="text-center p-3 rounded-lg bg-secondary/30">
-              <p className="text-lg font-bold text-primary">{formatMilesDisplay(lastUsedRange ?? propAdjustedRange ?? null)}</p>
-              <p className="text-xs text-muted-foreground">mile range</p>
+
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mt-3">
+              {[
+                {
+                  label: 'Drive time',
+                  value: duration ?? '—',
+                  helper: 'est. duration'
+                },
+                {
+                  label: 'Fuel top-offs',
+                  value: fuelStopsOnly.length,
+                  helper: 'planned stops'
+                },
+                {
+                  label: 'Vehicle range',
+                  value: formatMilesDisplay(lastUsedRange ?? propAdjustedRange ?? null),
+                  helper: 'per tank'
+                },
+                {
+                  label: 'Total fuel cost',
+                  value: totalFuelCost !== null ? formatCurrency(totalFuelCost) : '—',
+                  helper: fuelStopsOnly.length
+                    ? `${fuelStopsOnly.length} stops @ $${PLACEHOLDER_FUEL_PRICE.toFixed(2)}/gal`
+                    : 'est. fuel spend'
+                }
+              ].map((stat) => (
+                <div key={stat.label} className="rounded-xl bg-secondary/30 border border-border/60 p-3">
+                  <p className="text-[10px] uppercase tracking-wide text-muted-foreground">{stat.label}</p>
+                  <p className="text-lg font-semibold mt-1">{stat.value}</p>
+                  <p className="text-[10px] text-muted-foreground">{stat.helper}</p>
+                </div>
+              ))}
             </div>
           </div>
 
@@ -237,7 +269,9 @@ export const RouteSection = forwardRef<RouteSectionRef, RouteSectionProps>(({ ad
             endLocation={endLocation}
             gasStops={gasStops}
             fallbackDistance={distance}
-            fallbackRange={lastUsedRange ?? propAdjustedRange ?? DEFAULT_ADJUSTED_RANGE_MILES}
+            fallbackRange={effectiveRangeMiles}
+            estimatedFillCost={perFillCost}
+            fuelPricePerGallon={PLACEHOLDER_FUEL_PRICE}
           />
         </div>
       )}
@@ -253,9 +287,19 @@ interface StopSummaryListProps {
   gasStops: GasStop[];
   fallbackDistance: number | null;
   fallbackRange: number;
+  estimatedFillCost: number | null;
+  fuelPricePerGallon: number;
 }
 
-const StopSummaryList = ({ startLocation, endLocation, gasStops, fallbackDistance, fallbackRange }: StopSummaryListProps) => {
+const StopSummaryList = ({
+  startLocation,
+  endLocation,
+  gasStops,
+  fallbackDistance,
+  fallbackRange,
+  estimatedFillCost,
+  fuelPricePerGallon
+}: StopSummaryListProps) => {
   const fallbackStops: GasStop[] = [];
 
   if (startLocation) {
@@ -281,60 +325,90 @@ const StopSummaryList = ({ startLocation, endLocation, gasStops, fallbackDistanc
   }
 
   const displayedStops = gasStops.length ? gasStops : fallbackStops;
-  let fuelCounter = 0;
+  let sequentialIndex = 1;
 
   const getBadgeProps = (stop: GasStop) => {
     if (stop.type === 'start') {
-      return { label: 'A', classes: 'bg-primary text-primary-foreground' };
+      return { label: 'S', classes: 'bg-primary text-primary-foreground' };
     }
+
+    const label = `${sequentialIndex}`;
+    sequentialIndex += 1;
 
     if (stop.type === 'destination') {
-      return { label: 'B', classes: 'bg-accent text-accent-foreground' };
+      return { label, classes: 'bg-accent text-accent-foreground' };
     }
 
-    fuelCounter += 1;
-    return { label: `${fuelCounter}`, classes: 'bg-yellow-500 text-white' };
+    return { label, classes: 'bg-amber-500 text-white' };
   };
 
-  const buildLine = (stop: GasStop) => {
-    const baseTitle = [stop.name, stop.address].filter(Boolean).join(' | ') || stop.name || 'Stop';
+  const getStopTitle = (stop: GasStop) => {
+    if (stop.type === 'start') return 'Trip start';
+    if (stop.type === 'destination') return 'Arrive at destination';
+    return stop.name || 'Fuel stop';
+  };
 
-    const detailParts: string[] = [];
-
-    if (stop.type === 'start') {
-      detailParts.push('Trip start');
-    } else if (stop.type === 'destination') {
-      detailParts.push('Arrive');
-    }
-
-    if (stop.type !== 'start' && typeof stop.distanceFromLastMiles === 'number') {
-      detailParts.push(`${formatMilesDisplay(stop.distanceFromLastMiles, 0)} from last stop`);
-    }
-
-    if (!detailParts.length) {
-      return baseTitle;
-    }
-
-    return `${baseTitle} — ${detailParts.join(' — ')}`;
+  const getMetaLabel = (stop: GasStop) => {
+    if (stop.type === 'start') return startLocation?.address || stop.address || '';
+    if (stop.type === 'destination') return endLocation?.address || stop.address || '';
+    return stop.address || '';
   };
 
   return (
-    <div className="space-y-2 mt-4">
-      {displayedStops.map((stop, index) => {
-        const { label, classes } = getBadgeProps(stop);
-        const line = buildLine(stop);
+    <div className="rounded-2xl border border-border bg-secondary/40 p-4">
+      <div className="text-sm font-semibold text-muted-foreground mb-4">Stops & legs</div>
+      <div className="relative">
+        <div className="absolute left-4 top-0 bottom-0 w-px bg-border" />
+        {displayedStops.map((stop, index) => {
+          const { label, classes } = getBadgeProps(stop);
+          const title = getStopTitle(stop);
+          const subtitle = getMetaLabel(stop);
+          const showConnector = index < displayedStops.length - 1;
 
-        return (
-          <div key={`${stop.type}-${index}`} className="flex items-center gap-3 p-3 rounded-lg bg-secondary/50">
-            <div className={`h-8 w-8 rounded-full font-bold text-xs flex items-center justify-center ${classes}`}>
-              {label}
+          return (
+            <div key={`${stop.type}-${index}`} className="relative pl-12 pb-8 last:pb-0">
+              {showConnector && (
+                <span className="absolute left-4 top-8 bottom-0 w-px bg-border" />
+              )}
+              <div className={`absolute left-0 top-1.5 h-8 w-8 rounded-full font-bold text-xs flex items-center justify-center shadow ${classes}`}>
+                {label}
+              </div>
+              <div className="rounded-xl bg-background border border-border/60 p-4">
+                <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                  <div className="flex-1">
+                    <p className="font-semibold text-foreground leading-snug">{title}</p>
+                    {subtitle && (
+                      <p className="text-sm text-muted-foreground mt-0.5">{subtitle}</p>
+                    )}
+                  </div>
+                  <div className="flex flex-wrap gap-2 text-xs text-muted-foreground md:justify-end">
+                    {typeof stop.distanceFromLastMiles === 'number' && stop.type !== 'start' && (
+                      <span className="px-2 py-0.5 rounded-full bg-secondary/60">
+                        +{formatMilesDisplay(stop.distanceFromLastMiles, 0)} from last stop
+                      </span>
+                    )}
+                    {typeof stop.distanceFromStartMiles === 'number' && (
+                      <span className="px-2 py-0.5 rounded-full bg-secondary/60">
+                        {formatMilesDisplay(stop.distanceFromStartMiles, 0)} from start
+                      </span>
+                    )}
+                    {stop.type === 'fuel' && estimatedFillCost !== null && (
+                      <span className="px-2 py-0.5 rounded-full bg-secondary/60">
+                        {formatCurrency(estimatedFillCost)} est. fill-up · ${fuelPricePerGallon.toFixed(2)}/gal
+                      </span>
+                    )}
+                    {stop.type === 'fuel' && estimatedFillCost === null && (
+                      <span className="px-2 py-0.5 rounded-full bg-secondary/60">
+                        ${fuelPricePerGallon.toFixed(2)}/gal placeholder
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
             </div>
-            <div className="flex-1">
-              <p className="font-medium text-foreground leading-snug">{line}</p>
-            </div>
-          </div>
-        );
-      })}
+          );
+        })}
+      </div>
     </div>
   );
 };
