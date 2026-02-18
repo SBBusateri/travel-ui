@@ -18,6 +18,8 @@ export interface GasStop {
   distanceFromLastMiles?: number;
   hours?: string[] | null;
   isOpenNow?: boolean | null;
+  arrivalTime?: string | null;
+  hoursAvailable?: boolean;
 }
 
 export interface RouteData {

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Calendar, Clock } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -21,22 +21,101 @@ import { Label } from "@/components/ui/label";
 const hours = Array.from({ length: 12 }, (_, i) => (i + 1).toString().padStart(2, "0"));
 const minutes = ["00", "15", "30", "45"];
 
-export function DepartureSection() {
-  const [date, setDate] = useState<Date>();
-  const [hour, setHour] = useState<string>("");
-  const [minute, setMinute] = useState<string>("");
+interface DepartureSectionProps {
+  value: Date | null;
+  onChange?: (value: Date) => void;
+}
+
+const deriveTimeParts = (date: Date) => {
+  const hour24 = date.getHours();
+  const minuteValue = Math.floor(date.getMinutes() / 15) * 15;
+  const period = hour24 >= 12 ? "PM" : "AM";
+  const hour12 = hour24 % 12 === 0 ? 12 : hour24 % 12;
+  return {
+    hour: hour12.toString().padStart(2, "0"),
+    minute: minuteValue.toString().padStart(2, "0"),
+    period: period as "AM" | "PM"
+  };
+};
+
+const buildDateWithParts = (baseDate: Date, hour: string, minute: string, period: "AM" | "PM") => {
+  const result = new Date(baseDate);
+  let hourNumber = parseInt(hour, 10);
+  if (Number.isNaN(hourNumber)) {
+    hourNumber = 12;
+  }
+  let minuteNumber = parseInt(minute, 10);
+  if (Number.isNaN(minuteNumber)) {
+    minuteNumber = 0;
+  }
+
+  if (period === "PM" && hourNumber !== 12) {
+    hourNumber += 12;
+  }
+  if (period === "AM" && hourNumber === 12) {
+    hourNumber = 0;
+  }
+
+  result.setHours(hourNumber, minuteNumber, 0, 0);
+  return result;
+};
+
+export function DepartureSection({ value, onChange }: DepartureSectionProps) {
+  const [date, setDate] = useState<Date | null>(value);
+  const [hour, setHour] = useState<string>("12");
+  const [minute, setMinute] = useState<string>("00");
   const [period, setPeriod] = useState<"AM" | "PM">("AM");
 
+  const currentValue = useMemo(() => value ?? null, [value]);
+
   useEffect(() => {
-    const now = new Date();
-    setDate(now);
-    const currentHour = now.getHours();
-    const formattedHour = currentHour > 12 ? currentHour - 12 : currentHour === 0 ? 12 : currentHour;
-    setHour(formattedHour.toString().padStart(2, "0"));
-    const roundedMinutes = Math.floor(now.getMinutes() / 15) * 15;
-    setMinute(roundedMinutes.toString().padStart(2, "0"));
-    setPeriod(currentHour >= 12 ? "PM" : "AM");
-  }, []);
+    if (currentValue) {
+      setDate(currentValue);
+      const parts = deriveTimeParts(currentValue);
+      setHour(parts.hour);
+      setMinute(parts.minute);
+      setPeriod(parts.period);
+      return;
+    }
+
+    const fallback = new Date();
+    const parts = deriveTimeParts(fallback);
+    setDate(fallback);
+    setHour(parts.hour);
+    setMinute(parts.minute);
+    setPeriod(parts.period);
+    onChange?.(fallback);
+  }, [currentValue, onChange]);
+
+  const emitChange = (nextDate: Date | null) => {
+    if (!nextDate) return;
+    setDate(nextDate);
+    onChange?.(nextDate);
+  };
+
+  const handleDateChange = (selected: Date | undefined) => {
+    if (!selected) return;
+    const next = buildDateWithParts(selected, hour, minute, period);
+    emitChange(next);
+  };
+
+  const handleHourChange = (value: string) => {
+    setHour(value);
+    if (!date) return;
+    emitChange(buildDateWithParts(date, value, minute, period));
+  };
+
+  const handleMinuteChange = (value: string) => {
+    setMinute(value);
+    if (!date) return;
+    emitChange(buildDateWithParts(date, hour, value, period));
+  };
+
+  const handlePeriodChange = (nextPeriod: "AM" | "PM") => {
+    setPeriod(nextPeriod);
+    if (!date) return;
+    emitChange(buildDateWithParts(date, hour, minute, nextPeriod));
+  };
 
   return (
     <div className="space-y-4">

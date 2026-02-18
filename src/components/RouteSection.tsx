@@ -1,4 +1,5 @@
 import { useState, useRef, useImperativeHandle, forwardRef, useEffect } from "react";
+import { format as formatDate } from "date-fns";
 import { Navigation, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { VehicleSelector } from "@/components/VehicleSelector";
@@ -73,6 +74,8 @@ export const RouteSection = forwardRef<RouteSectionRef, RouteSectionProps>(({ ad
   const [gasStops, setGasStops] = useState<GasStop[]>([]);
   const [loading, setLoading] = useState(false);
   const [lastUsedRange, setLastUsedRange] = useState<number | null>(null);
+  const [routeDurationSeconds, setRouteDurationSeconds] = useState<number | null>(null);
+  const [departureDateTime, setDepartureDateTime] = useState<Date | null>(null);
 
   const handleStartLocationChange = (location: MapLocation | null) => {
     setStartLocation(location);
@@ -99,10 +102,16 @@ export const RouteSection = forwardRef<RouteSectionRef, RouteSectionProps>(({ ad
 
     setDistance(totalDistanceMeters / METERS_PER_MILE);
     setDuration(formatDurationFromSeconds(totalDurationSeconds));
+    setRouteDurationSeconds(totalDurationSeconds);
   };
 
   const calculateTrip = async () => {
     if (!startLocation || !endLocation) return;
+
+    const effectiveDeparture = departureDateTime ?? new Date();
+    if (!departureDateTime) {
+      setDepartureDateTime(effectiveDeparture);
+    }
 
     setLoading(true);
     try {
@@ -121,7 +130,8 @@ export const RouteSection = forwardRef<RouteSectionRef, RouteSectionProps>(({ ad
           lng: endLocation.lng,
           address: endLocation.address
         },
-        adjustedRangeMiles: rangeForCalculation
+        adjustedRangeMiles: rangeForCalculation,
+        departureTime: effectiveDeparture.toISOString()
       };
 
       const response = await apiService.getGasStops(payload);
@@ -139,6 +149,7 @@ export const RouteSection = forwardRef<RouteSectionRef, RouteSectionProps>(({ ad
   useEffect(() => {
     setGasStops([]);
     setLastUsedRange(null);
+    setRouteDurationSeconds(null);
   }, [startLocation, endLocation]);
 
   useImperativeHandle(ref, () => ({
@@ -153,6 +164,9 @@ export const RouteSection = forwardRef<RouteSectionRef, RouteSectionProps>(({ ad
   const totalFuelCost = perFillCost !== null && fuelStopsOnly.length > 0
     ? perFillCost * fuelStopsOnly.length
     : null;
+  const minutesPerMile = distance && routeDurationSeconds
+    ? routeDurationSeconds / 60 / distance
+    : null;
 
   return (
     <div className="travel-card space-y-6">
@@ -162,7 +176,7 @@ export const RouteSection = forwardRef<RouteSectionRef, RouteSectionProps>(({ ad
         <div className="w-full lg:w-[30%] space-y-6">
           <div className="space-y-6">
             <VehicleSelector onVehicleChange={onVehicleDataChange} />
-            <DepartureSection />
+            <DepartureSection value={departureDateTime} onChange={setDepartureDateTime} />
           </div>
         </div>
 
@@ -272,6 +286,8 @@ export const RouteSection = forwardRef<RouteSectionRef, RouteSectionProps>(({ ad
             fallbackRange={effectiveRangeMiles}
             estimatedFillCost={perFillCost}
             fuelPricePerGallon={PLACEHOLDER_FUEL_PRICE}
+            departureDate={departureDateTime}
+            minutesPerMile={minutesPerMile}
           />
         </div>
       )}
@@ -289,6 +305,8 @@ interface StopSummaryListProps {
   fallbackRange: number;
   estimatedFillCost: number | null;
   fuelPricePerGallon: number;
+  departureDate: Date | null;
+  minutesPerMile: number | null;
 }
 
 const StopSummaryList = ({
@@ -298,7 +316,9 @@ const StopSummaryList = ({
   fallbackDistance,
   fallbackRange,
   estimatedFillCost,
-  fuelPricePerGallon
+  fuelPricePerGallon,
+  departureDate,
+  minutesPerMile
 }: StopSummaryListProps) => {
   const fallbackStops: GasStop[] = [];
 
@@ -356,6 +376,11 @@ const StopSummaryList = ({
 
   const getHoursDisplay = (stop: GasStop) => {
     if (stop.type !== 'fuel') return null;
+
+    if (stop.hoursAvailable === false) {
+      return 'Hours unavailable';
+    }
+
     const status = typeof stop.isOpenNow === 'boolean'
       ? stop.isOpenNow
         ? 'Open now'
@@ -370,6 +395,24 @@ const StopSummaryList = ({
     return status ?? hoursLine ?? null;
   };
 
+  const getArrivalDate = (stop: GasStop) => {
+    if (stop.arrivalTime) {
+      const fromApi = new Date(stop.arrivalTime);
+      if (!Number.isNaN(fromApi.getTime())) {
+        return fromApi;
+      }
+    }
+
+    if (!departureDate || !minutesPerMile || typeof stop.distanceFromStartMiles !== 'number') {
+      return null;
+    }
+    const minutesFromStart = stop.distanceFromStartMiles * minutesPerMile;
+    const arrival = new Date(departureDate.getTime() + minutesFromStart * 60 * 1000);
+    return arrival;
+  };
+
+  const formatArrival = (arrival: Date) => formatDate(arrival, 'EEE h:mm a');
+
   return (
     <div className="rounded-2xl border border-border bg-secondary/40 p-4">
       <div className="text-sm font-semibold text-muted-foreground mb-4">Stops & legs</div>
@@ -380,6 +423,7 @@ const StopSummaryList = ({
           const title = getStopTitle(stop);
           const subtitle = getMetaLabel(stop);
           const hoursDisplay = getHoursDisplay(stop);
+          const arrivalDate = getArrivalDate(stop);
           const showConnector = index < displayedStops.length - 1;
 
           return (
@@ -422,6 +466,11 @@ const StopSummaryList = ({
                     {stop.type === 'fuel' && estimatedFillCost === null && (
                       <span className="px-2 py-0.5 rounded-full bg-secondary/60">
                         ${fuelPricePerGallon.toFixed(2)}/gal placeholder
+                      </span>
+                    )}
+                    {arrivalDate && (
+                      <span className="px-2 py-0.5 rounded-full bg-secondary/60">
+                        ETA {formatArrival(arrivalDate)}
                       </span>
                     )}
                   </div>

@@ -73,6 +73,7 @@ class ApiService {
     start: { lat: number; lng: number; address?: string };
     destination: { lat: number; lng: number; address?: string };
     adjustedRangeMiles: number;
+    departureTime?: string;
   }) {
     const response = await fetch(`${API_BASE_URL}/routes/gas-stops`, {
       method: 'POST',
