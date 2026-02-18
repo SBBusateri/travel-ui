@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Calendar, Clock, Zap } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Calendar, Clock } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -27,15 +27,16 @@ export function DepartureSection() {
   const [minute, setMinute] = useState<string>("");
   const [period, setPeriod] = useState<"AM" | "PM">("AM");
 
-  const handleLeaveNow = () => {
+  useEffect(() => {
     const now = new Date();
     setDate(now);
     const currentHour = now.getHours();
     const formattedHour = currentHour > 12 ? currentHour - 12 : currentHour === 0 ? 12 : currentHour;
     setHour(formattedHour.toString().padStart(2, "0"));
-    setMinute(Math.floor(now.getMinutes() / 15) * 15 === 60 ? "00" : (Math.floor(now.getMinutes() / 15) * 15).toString().padStart(2, "0"));
+    const roundedMinutes = Math.floor(now.getMinutes() / 15) * 15;
+    setMinute(roundedMinutes.toString().padStart(2, "0"));
     setPeriod(currentHour >= 12 ? "PM" : "AM");
-  };
+  }, []);
 
   return (
     <div className="space-y-4">
@@ -55,16 +56,8 @@ export function DepartureSection() {
           </div>
         </div>
         
-        {/* Leave Now Button - Responsive positioning */}
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={handleLeaveNow}
-          className="text-xs h-7 px-2 border-border/50 hover:border-primary/30 hover:bg-primary/5 whitespace-nowrap"
-        >
-          <Zap className="h-3 w-3 mr-1" />
-          Leave Now
-        </Button>
+        <div className="text-xs text-muted-foreground">
+        </div>
       </div>
 
       {/* Date & Time Pickers - More Compact */}
