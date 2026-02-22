@@ -27,6 +27,80 @@ const vehicleOptions: VehicleOption[] = [
   { id: "electric", label: "Electric", icon: Zap },
 ];
 
+const FALLBACK_YEARS = ["2024", "2023", "2022", "2021", "2020"];
+
+const FALLBACK_MAKES: Record<VehicleType, string[]> = {
+  car: ['Ford', 'Toyota', 'Honda', 'Chevrolet', 'BMW', 'Mercedes-Benz', 'Audi', 'Nissan', 'Hyundai', 'Kia'],
+  motorcycle: ['Harley-Davidson', 'Honda', 'Yamaha', 'Kawasaki', 'Suzuki', 'BMW', 'Ducati'],
+  rv: ['Winnebago', 'Thor', 'Forest River', 'Jayco', 'Coachmen', 'Keystone'],
+  electric: ['Tesla', 'Ford', 'Chevrolet', 'Hyundai', 'Kia', 'Nissan', 'Audi', 'BMW', 'Mercedes-Benz', 'Volkswagen']
+};
+
+const FALLBACK_MODELS: Record<string, string[]> = {
+  Ford: ['F-150', 'Mustang', 'Explorer', 'Escape', 'Focus'],
+  Toyota: ['Camry', 'Corolla', 'RAV4', 'Prius', 'Highlander'],
+  Honda: ['Civic', 'Accord', 'CR-V', 'Pilot', 'Fit'],
+  Chevrolet: ['Silverado', 'Malibu', 'Equinox', 'Tahoe', 'Camaro'],
+  Tesla: ['Model S', 'Model 3', 'Model X', 'Model Y', 'Cybertruck'],
+  BMW: ['3 Series', '5 Series', 'X3', 'X5', 'i4'],
+  'Mercedes-Benz': ['C-Class', 'E-Class', 'GLC', 'GLE', 'EQS'],
+  Audi: ['A4', 'A6', 'Q5', 'Q7', 'e-tron'],
+  Nissan: ['Altima', 'Sentra', 'Rogue', 'Leaf', 'Pathfinder'],
+  Hyundai: ['Elantra', 'Sonata', 'Tucson', 'Santa Fe', 'Kona'],
+  Kia: ['Forte', 'Optima', 'Sportage', 'Sorento', 'Telluride']
+};
+
+const FALLBACK_VEHICLE_INFO: Record<VehicleType, VehicleData> = {
+  car: {
+    year: 2026,
+    make: 'Ford',
+    model: 'Mustang',
+    mpg: 30,
+    gasType: 'Regular',
+    gasTankSize: 15,
+    adjustedRange: 450,
+    horsepower: 480,
+    baseRange: 450,
+    batteryLife: null,
+  },
+  motorcycle: {
+    year: 2024,
+    make: 'Harley-Davidson',
+    model: 'Sportster',
+    mpg: 50,
+    gasType: 'Regular',
+    gasTankSize: 4,
+    adjustedRange: 200,
+    horsepower: 100,
+    baseRange: 200,
+    batteryLife: null,
+  },
+  rv: {
+    year: 2024,
+    make: 'Winnebago',
+    model: 'Adventurer',
+    mpg: 15,
+    gasType: 'Regular',
+    gasTankSize: 30,
+    adjustedRange: 225,
+    horsepower: 300,
+    baseRange: 225,
+    batteryLife: null,
+  },
+  electric: {
+    year: 2024,
+    make: 'Tesla',
+    model: 'Model Y',
+    mpg: 120,
+    gasType: 'Electric',
+    gasTankSize: 0,
+    adjustedRange: 300,
+    horsepower: 300,
+    baseRange: 300,
+    batteryLife: 300,
+  },
+};
+
 interface VehicleSelectorProps {
   onVehicleChange?: (data: VehicleData) => void;
 }
@@ -46,14 +120,22 @@ export function VehicleSelector({ onVehicleChange }: VehicleSelectorProps) {
   const [year, setYear] = useState<string>("");
   const [make, setMake] = useState<string>("");
   const [model, setModel] = useState<string>("");
-  
+  const [trim, setTrim] = useState<string>("");
+
   // API data states
   const [years, setYears] = useState<string[]>([]);
   const [makes, setMakes] = useState<string[]>([]);
   const [models, setModels] = useState<string[]>([]);
+  const [trims, setTrims] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string>("");
   const [vehicleInfo, setVehicleInfo] = useState<VehicleData | null>(null);
+  const [requiresManualRange, setRequiresManualRange] = useState(false);
+  const [manualRange, setManualRange] = useState("");
+
+  const isSupabaseSupported = selectedType === 'car';
+  const fallbackVehicle = FALLBACK_VEHICLE_INFO[selectedType];
+  const showFallbackVehicle = !vehicleInfo && !year && !make && !model && !isSupabaseSupported;
 
   // Load years on mount
   useEffect(() => {
@@ -67,6 +149,8 @@ export function VehicleSelector({ onVehicleChange }: VehicleSelectorProps) {
     } else {
       setMakes([]);
       setModels([]);
+      setTrims([]);
+      setTrim("");
     }
   }, [year, selectedType]);
 
@@ -76,49 +160,63 @@ export function VehicleSelector({ onVehicleChange }: VehicleSelectorProps) {
       loadModels();
     } else {
       setModels([]);
+      setTrims([]);
+      setTrim("");
     }
   }, [year, make, selectedType]);
 
-  // Fetch vehicle info when model is selected
+  // Load trims when model changes
+  useEffect(() => {
+    if (year && make && model) {
+      loadTrims();
+    } else {
+      setTrims([]);
+      setTrim("");
+    }
+  }, [year, make, model, selectedType]);
+
+  // Fetch vehicle info when selection changes
   useEffect(() => {
     if (year && make && model) {
       fetchVehicleInfo();
     }
-  }, [year, make, model, selectedType]);
+  }, [year, make, model, trim, selectedType]);
 
   // Notify parent when vehicle info changes
   useEffect(() => {
     if (vehicleInfo) {
-      onVehicleChange?.(vehicleInfo);
-    } else if (!year && !make && !model) {
-      // Default to Ford Mustang 2026 for testing when no vehicle selected
-      const defaultVehicle = {
-        year: 2026,
-        make: 'Ford',
-        model: 'Mustang',
-        mpg: 30,
-        gasType: 'Regular',
-        gasTankSize: 15,
-        adjustedRange: 450, // 30 MPG * 15 gallons
-        horsepower: 480,
-        batteryLife: null
+      const manualRangeValue = manualRange ? Number(manualRange) : undefined;
+      const infoForParent = {
+        ...vehicleInfo,
+        adjustedRange: requiresManualRange ? manualRangeValue : vehicleInfo.adjustedRange,
       };
-      onVehicleChange?.(defaultVehicle);
+      onVehicleChange?.(infoForParent);
+    } else if (showFallbackVehicle) {
+      onVehicleChange?.(fallbackVehicle);
     }
-  }, [vehicleInfo, onVehicleChange, year, make, model]);
+  }, [
+    vehicleInfo,
+    requiresManualRange,
+    manualRange,
+    onVehicleChange,
+    showFallbackVehicle,
+    fallbackVehicle,
+  ]);
 
   const loadYears = async () => {
     try {
       setLoading(true);
       setError("");
-      const typeMap = { car: "cars", motorcycle: "motorcycles", rv: "rv", electric: "ev" };
-      const data = await apiService.getYears(typeMap[selectedType as keyof typeof typeMap]);
-      setYears(data);
+      if (!isSupabaseSupported) {
+        setYears(FALLBACK_YEARS);
+        return;
+      }
+      const data = await apiService.getYears();
+      setYears((data || []).map((value) => value.toString()));
     } catch (err) {
       console.error('Failed to load years:', err);
-      // Provide fallback years
-      setYears(['2024', '2023', '2022', '2021', '2020']);
-      setError(""); // Don't show error to user, just use fallback
+      setYears(FALLBACK_YEARS);
+      setError('Unable to load vehicle years from database. Showing fallback options.');
     } finally {
       setLoading(false);
     }
@@ -128,20 +226,16 @@ export function VehicleSelector({ onVehicleChange }: VehicleSelectorProps) {
     try {
       setLoading(true);
       setError("");
-      const typeMap = { car: "cars", motorcycle: "motorcycles", rv: "rv", electric: "ev" };
-      const data = await apiService.getMakes(year, typeMap[selectedType as keyof typeof typeMap]);
+      if (!isSupabaseSupported) {
+        setMakes(FALLBACK_MAKES[selectedType]);
+        return;
+      }
+      const data = await apiService.getMakes(year);
       setMakes(data);
     } catch (err) {
       console.error('Failed to load makes:', err);
-      // Provide fallback makes based on vehicle type
-      const fallbackMakes = {
-        car: ['Ford', 'Toyota', 'Honda', 'Chevrolet', 'BMW', 'Mercedes-Benz', 'Audi', 'Nissan', 'Hyundai', 'Kia'],
-        motorcycle: ['Harley-Davidson', 'Honda', 'Yamaha', 'Kawasaki', 'Suzuki', 'BMW', 'Ducati'],
-        rv: ['Winnebago', 'Thor', 'Forest River', 'Jayco', 'Coachmen', 'Keystone'],
-        electric: ['Tesla', 'Ford', 'Chevrolet', 'Hyundai', 'Kia', 'Nissan', 'Audi', 'BMW', 'Mercedes-Benz', 'Volkswagen']
-      };
-      setMakes(fallbackMakes[selectedType] || fallbackMakes.car);
-      setError(""); // Don't show error to user, just use fallback
+      setMakes(FALLBACK_MAKES[selectedType]);
+      setError('Unable to load vehicle makes from database. Showing fallback options.');
     } finally {
       setLoading(false);
     }
@@ -151,60 +245,128 @@ export function VehicleSelector({ onVehicleChange }: VehicleSelectorProps) {
     try {
       setLoading(true);
       setError("");
-      const typeMap = { car: "cars", motorcycle: "motorcycles", rv: "rv", electric: "ev" };
-      const data = await apiService.getModels(year, make, typeMap[selectedType as keyof typeof typeMap]);
+      if (!isSupabaseSupported) {
+        setModels(FALLBACK_MODELS[make] || ['Base Model', 'Sport', 'Limited', 'Premium']);
+        return;
+      }
+      const data = await apiService.getModels(year, make);
       setModels(data);
     } catch (err) {
       console.error('Failed to load models:', err);
-      // Provide fallback models based on make
-      const fallbackModels = {
-        'Ford': ['F-150', 'Mustang', 'Explorer', 'Escape', 'Focus'],
-        'Toyota': ['Camry', 'Corolla', 'RAV4', 'Prius', 'Highlander'],
-        'Honda': ['Civic', 'Accord', 'CR-V', 'Pilot', 'Fit'],
-        'Chevrolet': ['Silverado', 'Malibu', 'Equinox', 'Tahoe', 'Camaro'],
-        'Tesla': ['Model S', 'Model 3', 'Model X', 'Model Y', 'Cybertruck'],
-        'BMW': ['3 Series', '5 Series', 'X3', 'X5', 'i4'],
-        'Mercedes-Benz': ['C-Class', 'E-Class', 'GLC', 'GLE', 'EQS'],
-        'Audi': ['A4', 'A6', 'Q5', 'Q7', 'e-tron'],
-        'Nissan': ['Altima', 'Sentra', 'Rogue', 'Leaf', 'Pathfinder'],
-        'Hyundai': ['Elantra', 'Sonata', 'Tucson', 'Santa Fe', 'Kona'],
-        'Kia': ['Forte', 'Optima', 'Sportage', 'Sorento', 'Telluride']
-      };
-      setModels(fallbackModels[make] || ['Base Model', 'Sport', 'Limited', 'Premium']);
-      setError(""); // Don't show error to user, just use fallback
+      setModels(FALLBACK_MODELS[make] || ['Base Model', 'Sport', 'Limited', 'Premium']);
+      setError('Unable to load vehicle models from database. Showing fallback options.');
     } finally {
       setLoading(false);
     }
+  };
+
+  const loadTrims = async () => {
+    try {
+      setLoading(true);
+      setError("");
+      if (!isSupabaseSupported) {
+        setTrims([]);
+        setTrim("");
+        return;
+      }
+      const data = await apiService.getTrims(year, make, model);
+      setTrims(data);
+      if (data.length && !data.includes(trim)) {
+        setTrim(data[0]);
+      }
+    } catch (err) {
+      console.error('Failed to load trims:', err);
+      setTrims([]);
+      setTrim("");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const mapVehicleResponse = (vehicle: Record<string, unknown>): VehicleData => {
+    const tankSize = typeof vehicle.tank_size === 'number' ? vehicle.tank_size : null;
+    const mpgHighway = typeof vehicle.UHighway === 'number' && vehicle.UHighway > 0 ? vehicle.UHighway : null;
+    const mpgFromRange = typeof vehicle.range === 'number' && tankSize
+      ? Math.round(vehicle.range / tankSize)
+      : null;
+    const mpg = mpgFromRange ?? mpgHighway ?? (typeof vehicle.UCity === 'number' ? vehicle.UCity : null);
+
+    let baseRange: number | null = null;
+    if (typeof vehicle.range === 'number' && vehicle.range > 0) {
+      baseRange = vehicle.range;
+    } else if (tankSize && mpgHighway) {
+      baseRange = Math.round(tankSize * mpgHighway);
+    }
+
+    return {
+      year: typeof vehicle.year === 'number' ? vehicle.year : parseInt(String(vehicle.year || 0), 10),
+      make: String(vehicle.make ?? make),
+      model: String(vehicle.model ?? model),
+      trim: vehicle.trim ? String(vehicle.trim) : undefined,
+      mpg: mpg ?? undefined,
+      gasType: vehicle.fuelType ? String(vehicle.fuelType) : undefined,
+      gasTankSize: tankSize ?? undefined,
+      adjustedRange: baseRange ?? undefined,
+      baseRange: baseRange ?? undefined,
+      horsepower: typeof vehicle.horsepower === 'number' ? Math.round(vehicle.horsepower) : undefined,
+      batteryLife: typeof vehicle.charge240 === 'number'
+        ? vehicle.charge240
+        : typeof vehicle.charge120 === 'number'
+          ? vehicle.charge120
+          : null,
+    };
   };
 
   const fetchVehicleInfo = async () => {
     try {
       setLoading(true);
       setError("");
-      const typeMap = { car: "cars", motorcycle: "motorcycles", rv: "rv", electric: "ev" };
-      const data = await apiService.getVehicleInfo({
+      setRequiresManualRange(false);
+      setManualRange('');
+
+      if (!isSupabaseSupported) {
+        setVehicleInfo(fallbackVehicle);
+        return;
+      }
+
+      const vehicle = await apiService.getVehicleInfo({
         year,
         make,
         model,
-        type: typeMap[selectedType as keyof typeof typeMap]
+        trim: trim || undefined,
       });
-      setVehicleInfo(data);
+
+      if (!vehicle) {
+        setVehicleInfo({
+          year: Number(year) || undefined,
+          make,
+          model,
+          trim: trim || undefined,
+        });
+        setRequiresManualRange(true);
+        return;
+      }
+
+      const mapped = mapVehicleResponse(vehicle as Record<string, unknown>);
+      setVehicleInfo(mapped);
+      setRequiresManualRange(!mapped.adjustedRange);
     } catch (err) {
       console.error('Failed to fetch vehicle info:', err);
-      // Provide fallback vehicle info based on type and make
-      const fallbackInfo = {
-        year: parseInt(year),
-        make: make,
-        model: model,
-        mpg: selectedType === 'electric' ? 120 : selectedType === 'motorcycle' ? 50 : selectedType === 'rv' ? 15 : 30,
-        gasType: selectedType === 'electric' ? 'Electric' : 'Regular',
-        gasTankSize: selectedType === 'electric' ? 0 : selectedType === 'motorcycle' ? 4 : selectedType === 'rv' ? 30 : 15,
-        adjustedRange: selectedType === 'electric' ? 300 : selectedType === 'motorcycle' ? 200 : selectedType === 'rv' ? 225 : 450,
-        horsepower: selectedType === 'electric' ? 300 : selectedType === 'motorcycle' ? 100 : selectedType === 'rv' ? 300 : 250,
-        batteryLife: selectedType === 'electric' ? 300 : null
-      };
-      setVehicleInfo(fallbackInfo);
-      setError(""); // Don't show error to user, just use fallback
+      if (!isSupabaseSupported) {
+        setVehicleInfo(fallbackVehicle);
+        setError('Unable to fetch vehicle details from database. Showing fallback values.');
+        setRequiresManualRange(false);
+        setManualRange('');
+      } else {
+        setVehicleInfo({
+          year: Number(year) || undefined,
+          make,
+          model,
+          trim: trim || undefined,
+        });
+        setRequiresManualRange(true);
+        setError('');
+      }
     } finally {
       setLoading(false);
     }
@@ -213,6 +375,8 @@ export function VehicleSelector({ onVehicleChange }: VehicleSelectorProps) {
   const handleMakeChange = (value: string) => {
     setMake(value);
     setModel(""); // Reset model when make changes
+    setTrims([]);
+    setTrim("");
   };
 
   return (
@@ -341,27 +505,75 @@ export function VehicleSelector({ onVehicleChange }: VehicleSelectorProps) {
             </SelectContent>
           </Select>
         </div>
+
+        {isSupabaseSupported && trims.length > 0 && (
+          <div className="space-y-1">
+            <Label htmlFor="trim" className="text-xs font-medium text-foreground">
+            </Label>
+            <Select value={trim} onValueChange={setTrim} disabled={loading}>
+              <SelectTrigger id="trim" className="h-9 text-sm">
+                {loading && model && !trim ? (
+                  <div className="flex items-center gap-1.5">
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                    <span className="text-xs">Loading...</span>
+                  </div>
+                ) : (
+                  <SelectValue placeholder="Trim" />
+                )}
+              </SelectTrigger>
+              <SelectContent>
+                {trims.map((t) => (
+                  <SelectItem key={t} value={t}>
+                    {t}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
       </div>
 
       {/* Vehicle Info Display - More Compact */}
-      {(vehicleInfo || (!year && !make && !model)) && (
-        <div className="p-3 rounded-lg bg-primary/5 border border-primary/20 animate-fade-in">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-foreground">
-                {vehicleInfo ? 'Vehicle Selected' : 'Default Vehicle'}
-              </p>
-              <p className="text-xs text-muted-foreground">
-                {vehicleInfo ? `${year} ${make} ${model}` : '2026 Ford Mustang'}
-              </p>
-            </div>
-            <div className="text-right">
-              <p className="text-lg font-bold text-primary">
-                {vehicleInfo?.adjustedRange || 450}
-              </p>
-              <p className="text-xs text-muted-foreground">mile range</p>
+      {(vehicleInfo || showFallbackVehicle) && (
+        <div className="space-y-3">
+          <div className="p-3 rounded-lg bg-primary/5 border border-primary/20 animate-fade-in">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-foreground">
+                  {vehicleInfo ? 'Vehicle Selected' : 'Default Vehicle'}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {vehicleInfo
+                    ? `${year} ${make} ${model}${trim ? ` ${trim}` : ''}`
+                    : `${fallbackVehicle.year} ${fallbackVehicle.make} ${fallbackVehicle.model}`}
+                </p>
+              </div>
+              <div className="text-right">
+                <p className="text-lg font-bold text-primary">
+                  {requiresManualRange
+                    ? manualRange || '—'
+                    : vehicleInfo?.adjustedRange ?? fallbackVehicle.adjustedRange ?? '—'}
+                </p>
+                <p className="text-xs text-muted-foreground">mile range</p>
+              </div>
             </div>
           </div>
+
+          {requiresManualRange && (
+            <div className="space-y-2">
+              <p className="text-xs text-muted-foreground">
+                Sorry, we couldn’t find the range for this vehicle. Enter your expected range below:
+              </p>
+              <Input
+                type="number"
+                min={0}
+                value={manualRange}
+                onChange={(event) => setManualRange(event.target.value)}
+                placeholder="Enter range in miles"
+                className="h-9 text-sm"
+              />
+            </div>
+          )}
         </div>
       )}
     </div>

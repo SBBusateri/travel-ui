@@ -1,55 +1,56 @@
 const API_BASE_URL = '/api';
 
 class ApiService {
-  async getYears(type = 'cars') {
-    const response = await fetch(`${API_BASE_URL}/years?type=${type}`);
+  async getYears() {
+    const response = await fetch(`${API_BASE_URL}/vehicles/years`);
     if (!response.ok) throw new Error('Failed to fetch years');
-    return response.json();
+    const { data } = await response.json();
+    return data ?? [];
   }
 
-  async getMakes(year: string, type = 'cars') {
-    const response = await fetch(`${API_BASE_URL}/makes?year=${year}&type=${type}`);
+  async getMakes(year: string) {
+    const response = await fetch(`${API_BASE_URL}/vehicles/makes?year=${encodeURIComponent(year)}`);
     if (!response.ok) throw new Error('Failed to fetch makes');
-    return response.json();
+    const { data } = await response.json();
+    return data ?? [];
   }
 
-  async getModels(year: string, make: string, type = 'cars') {
-    const response = await fetch(`${API_BASE_URL}/models?year=${year}&make=${make}&type=${type}`);
+  async getModels(year: string, make: string) {
+    const params = new URLSearchParams({ year, make });
+    const response = await fetch(`${API_BASE_URL}/vehicles/models?${params.toString()}`);
     if (!response.ok) throw new Error('Failed to fetch models');
-    return response.json();
+    const { data } = await response.json();
+    return data ?? [];
   }
 
-  async getEngines(year: string, make: string, model: string, type = 'cars') {
-    const response = await fetch(`${API_BASE_URL}/engines?year=${year}&make=${make}&model=${model}&type=${type}`);
-    if (!response.ok) throw new Error('Failed to fetch engines');
-    return response.json();
+  async getTrims(year: string, make: string, model: string) {
+    const params = new URLSearchParams({ year, make, model });
+    const response = await fetch(`${API_BASE_URL}/vehicles/trims?${params.toString()}`);
+    if (!response.ok) throw new Error('Failed to fetch trims');
+    const { data } = await response.json();
+    return data ?? [];
   }
 
-  async getVehicleInfo(data: {
+  async getVehicleInfo(params: {
     year: string;
     make: string;
     model: string;
-    engine?: string;
-    passengerWeight?: number;
-    type?: string;
+    trim?: string;
   }) {
-    const response = await fetch(`${API_BASE_URL}/carInfo`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        year: data.year,
-        make: data.make,
-        model: data.model,
-        engine: data.engine || '',
-        passengerWeight: data.passengerWeight || 0,
-        type: data.type || 'cars'
-      }),
+    const searchParams = new URLSearchParams({
+      year: params.year,
+      make: params.make,
+      model: params.model,
     });
-    
+
+    if (params.trim) {
+      searchParams.set('trim', params.trim);
+    }
+
+    const response = await fetch(`${API_BASE_URL}/vehicles?${searchParams.toString()}`);
     if (!response.ok) throw new Error('Failed to fetch vehicle info');
-    return response.json();
+    const { data } = await response.json();
+    return data ?? null;
   }
 
   async calculateRoute(data: {
