@@ -12,6 +12,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { apiService } from "@/services/apiService";
 
+const ENABLE_SUPABASE_VEHICLE_SELECTOR = false;
+const ENABLE_MANUAL_RANGE_ENTRY = true;
+const MIN_MANUAL_RANGE_MILES = 75;
+
 type VehicleType = "car" | "motorcycle" | "rv" | "electric";
 
 interface VehicleOption {
@@ -103,6 +107,7 @@ const FALLBACK_VEHICLE_INFO: Record<VehicleType, VehicleData> = {
 
 interface VehicleSelectorProps {
   onVehicleChange?: (data: VehicleData) => void;
+  showValidation?: boolean;
 }
 
 type VehicleData = {
@@ -112,10 +117,74 @@ type VehicleData = {
   gasTankSize?: number;
   gasType?: string;
   baseRange?: number;
+  isManualRangeValid?: boolean;
   [key: string]: unknown;
 };
 
-export function VehicleSelector({ onVehicleChange }: VehicleSelectorProps) {
+function ManualRangeSection({ onVehicleChange, showValidation = false }: VehicleSelectorProps) {
+  const [rangeInput, setRangeInput] = useState<string>("");
+
+  const parsedRange = Number(rangeInput);
+  const hasValue = rangeInput.trim().length > 0;
+  const isValidRange = hasValue && !Number.isNaN(parsedRange) && parsedRange >= MIN_MANUAL_RANGE_MILES;
+  const shouldShowError = showValidation && !isValidRange;
+
+  useEffect(() => {
+    if (isValidRange) {
+      onVehicleChange?.({ adjustedRange: parsedRange, isManualRangeValid: true });
+    } else {
+      onVehicleChange?.({ adjustedRange: undefined, isManualRangeValid: false });
+    }
+  }, [isValidRange, parsedRange, onVehicleChange]);
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-2 mb-4">
+        <div className="h-8 w-8 rounded-lg sunset-gradient flex items-center justify-center">
+          <Car className="h-4 w-4 text-primary-foreground" />
+        </div>
+        <div>
+          <h2 className="text-base font-semibold text-foreground">Add Vehicle Range</h2>
+          <p className="text-xs text-muted-foreground">Enter your vehicle&apos;s estimated range to plan fuel stops.</p>
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="vehicle-range" className="text-xs font-medium text-foreground">
+          Vehicle range (miles)
+        </Label>
+        <Input
+          id="vehicle-range"
+          type="number"
+          min={MIN_MANUAL_RANGE_MILES}
+          value={rangeInput}
+          onChange={(event) => {
+            setRangeInput(event.target.value);
+          }}
+          className="h-10 text-sm"
+          aria-describedby="vehicle-range-helper"
+          aria-invalid={shouldShowError}
+          required
+          placeholder="eg 300"
+        />
+        <div id="vehicle-range-helper" className="text-xs text-muted-foreground">
+          Minimum range is {MIN_MANUAL_RANGE_MILES} miles.
+        </div>
+        {shouldShowError && (
+          <div className="text-xs text-destructive">
+            Please enter a range of at least {MIN_MANUAL_RANGE_MILES} miles.
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export function VehicleSelector({ onVehicleChange, showValidation }: VehicleSelectorProps) {
+  if (ENABLE_MANUAL_RANGE_ENTRY && !ENABLE_SUPABASE_VEHICLE_SELECTOR) {
+    return <ManualRangeSection onVehicleChange={onVehicleChange} showValidation={showValidation} />;
+  }
+
   const [selectedType, setSelectedType] = useState<VehicleType>("car");
   const [year, setYear] = useState<string>("");
   const [make, setMake] = useState<string>("");

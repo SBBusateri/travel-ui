@@ -26,6 +26,8 @@ const buttonVariants = cva(
           "teal-gradient text-accent-foreground shadow-lg hover:shadow-xl hover:scale-[1.02] active:scale-[0.98]",
         "leave-now":
           "bg-accent text-accent-foreground shadow-md hover:bg-accent/90 hover:shadow-lg active:scale-[0.98] animate-pulse-soft",
+        muted:
+          "bg-muted text-muted-foreground border border-border/60 shadow-none hover:bg-muted/90 hover:text-muted-foreground",
       },
       size: {
         default: "h-11 px-5 py-2",

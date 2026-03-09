@@ -161,7 +161,7 @@ export function DepartureSection({ value, onChange }: DepartureSectionProps) {
               <CalendarComponent
                 mode="single"
                 selected={date}
-                onSelect={setDate}
+                onSelect={handleDateChange}
                 initialFocus
                 className="pointer-events-auto"
                 disabled={(date) => date < new Date(new Date().setHours(0, 0, 0, 0))}
@@ -174,7 +174,7 @@ export function DepartureSection({ value, onChange }: DepartureSectionProps) {
         <div className="space-y-1">
           <Label className="text-xs font-medium text-foreground mb-1">Time</Label>
           <div className="flex gap-1">
-            <Select value={hour} onValueChange={setHour}>
+            <Select value={hour} onValueChange={handleHourChange}>
               <SelectTrigger className="h-8 flex-1 text-sm">
                 <SelectValue placeholder="HH" />
               </SelectTrigger>
@@ -187,7 +187,7 @@ export function DepartureSection({ value, onChange }: DepartureSectionProps) {
               </SelectContent>
             </Select>
             <span className="flex items-center text-muted-foreground font-bold text-sm">:</span>
-            <Select value={minute} onValueChange={setMinute}>
+            <Select value={minute} onValueChange={handleMinuteChange}>
               <SelectTrigger className="h-8 flex-1 text-sm">
                 <SelectValue placeholder="MM" />
               </SelectTrigger>
@@ -201,7 +201,7 @@ export function DepartureSection({ value, onChange }: DepartureSectionProps) {
             </Select>
             <div className="flex rounded-md border border-input overflow-hidden">
               <button
-                onClick={() => setPeriod("AM")}
+                onClick={() => handlePeriodChange("AM")}
                 className={cn(
                   "px-2 h-8 text-xs font-medium transition-colors",
                   period === "AM"
@@ -212,7 +212,7 @@ export function DepartureSection({ value, onChange }: DepartureSectionProps) {
                 AM
               </button>
               <button
-                onClick={() => setPeriod("PM")}
+                onClick={() => handlePeriodChange("PM")}
                 className={cn(
                   "px-2 h-8 text-xs font-medium transition-colors",
                   period === "PM"

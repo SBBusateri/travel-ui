@@ -12,6 +12,7 @@ import { apiService } from "@/services/apiService";
 type VehicleData = {
   adjustedRange?: number;
   mpg?: number;
+  isManualRangeValid?: boolean;
   [key: string]: unknown;
 };
 
@@ -76,6 +77,8 @@ export const RouteSection = forwardRef<RouteSectionRef, RouteSectionProps>(({ ad
   const [lastUsedRange, setLastUsedRange] = useState<number | null>(null);
   const [routeDurationSeconds, setRouteDurationSeconds] = useState<number | null>(null);
   const [departureDateTime, setDepartureDateTime] = useState<Date | null>(null);
+  const [vehicleDataState, setVehicleDataState] = useState<VehicleData | null>(null);
+  const [showValidation, setShowValidation] = useState(false);
 
   const handleStartLocationChange = (location: MapLocation | null) => {
     setStartLocation(location);
@@ -106,18 +109,26 @@ export const RouteSection = forwardRef<RouteSectionRef, RouteSectionProps>(({ ad
   };
 
   const calculateTrip = async () => {
-    if (!startLocation || !endLocation) return;
+    const adjustedRangeForCalculation = propAdjustedRange ?? vehicleDataState?.adjustedRange ?? null;
 
-    const effectiveDeparture = departureDateTime ?? new Date();
-    if (!departureDateTime) {
-      setDepartureDateTime(effectiveDeparture);
+    if (
+      !startLocation ||
+      !endLocation ||
+      !departureDateTime ||
+      typeof adjustedRangeForCalculation !== 'number' ||
+      Number.isNaN(adjustedRangeForCalculation)
+    ) {
+      setShowValidation(true);
+      return;
     }
+
+    const effectiveDeparture = departureDateTime;
 
     setLoading(true);
     try {
       onCalculateRoute?.();
 
-      const rangeForCalculation = propAdjustedRange ?? lastUsedRange ?? DEFAULT_ADJUSTED_RANGE_MILES;
+      const rangeForCalculation = adjustedRangeForCalculation;
 
       const payload = {
         start: {
@@ -137,6 +148,7 @@ export const RouteSection = forwardRef<RouteSectionRef, RouteSectionProps>(({ ad
       const response = await apiService.getGasStops(payload);
       setGasStops(response?.stops || []);
       setLastUsedRange(rangeForCalculation);
+      setShowValidation(false);
     } catch (error) {
       console.error('Gas stop calculation failed:', error);
       setGasStops([]);
@@ -145,6 +157,25 @@ export const RouteSection = forwardRef<RouteSectionRef, RouteSectionProps>(({ ad
       setLoading(false);
     }
   };
+
+  const handleVehicleChange = (data: VehicleData) => {
+    setVehicleDataState(data);
+    onVehicleDataChange?.(data);
+  };
+
+  useEffect(() => {
+    if (!showValidation) return;
+
+    const adjustedRangeValue = propAdjustedRange ?? vehicleDataState?.adjustedRange ?? null;
+    const isRangeValid =
+      typeof adjustedRangeValue === 'number' &&
+      !Number.isNaN(adjustedRangeValue) &&
+      (vehicleDataState?.isManualRangeValid ?? true);
+
+    if (startLocation && endLocation && departureDateTime && isRangeValid) {
+      setShowValidation(false);
+    }
+  }, [showValidation, propAdjustedRange, vehicleDataState, startLocation, endLocation, departureDateTime]);
 
   useEffect(() => {
     setGasStops([]);
@@ -155,6 +186,25 @@ export const RouteSection = forwardRef<RouteSectionRef, RouteSectionProps>(({ ad
   useImperativeHandle(ref, () => ({
     calculateTrip
   }));
+
+  const adjustedRangeValue = propAdjustedRange ?? vehicleDataState?.adjustedRange ?? null;
+  const isRangeValid =
+    typeof adjustedRangeValue === 'number' &&
+    !Number.isNaN(adjustedRangeValue) &&
+    (vehicleDataState?.isManualRangeValid ?? true);
+  const isStartFilled = Boolean(startLocation);
+  const isEndFilled = Boolean(endLocation);
+  const isDepartureFilled = Boolean(departureDateTime);
+  const allRequiredSatisfied = isStartFilled && isEndFilled && isRangeValid && isDepartureFilled;
+
+  const handleCalculateClick = () => {
+    if (!allRequiredSatisfied) {
+      setShowValidation(true);
+      return;
+    }
+
+    void calculateTrip();
+  };
 
   const fuelStopsOnly = gasStops.filter((stop) => stop.type === 'fuel');
   const effectiveRangeMiles = lastUsedRange ?? propAdjustedRange ?? DEFAULT_ADJUSTED_RANGE_MILES;
@@ -175,8 +225,13 @@ export const RouteSection = forwardRef<RouteSectionRef, RouteSectionProps>(({ ad
         {/* Left Side - All Inputs Container (30%) */}
         <div className="w-full lg:w-[30%] space-y-6">
           <div className="space-y-6">
-            <VehicleSelector onVehicleChange={onVehicleDataChange} />
-            <DepartureSection value={departureDateTime} onChange={setDepartureDateTime} />
+            <VehicleSelector onVehicleChange={handleVehicleChange} showValidation={showValidation} />
+            <div className="space-y-2">
+              <DepartureSection value={departureDateTime} onChange={setDepartureDateTime} />
+              {showValidation && !isDepartureFilled && (
+                <p className="text-xs text-destructive">Departure time is required.</p>
+              )}
+            </div>
           </div>
         </div>
 
@@ -199,6 +254,9 @@ export const RouteSection = forwardRef<RouteSectionRef, RouteSectionProps>(({ ad
                 onDestinationChange={handleEndLocationChange}
                 stopLocation={stopLocation}
                 onStopChange={handleStopChange}
+                showValidation={showValidation}
+                isStartInvalid={!isStartFilled}
+                isDestinationInvalid={!isEndFilled}
               />
             </div>
           </div>
@@ -208,11 +266,11 @@ export const RouteSection = forwardRef<RouteSectionRef, RouteSectionProps>(({ ad
       {/* Calculate My Trip Button */}
       <div className="max-w-7xl mx-auto px-4">
         <Button 
-          variant="sunset" 
+          variant={allRequiredSatisfied ? "sunset" : "muted"} 
           size="xl" 
           className={`w-full md:w-auto md:min-w-[300px] mx-auto flex animate-slide-up`}
-          disabled={loading || !startLocation || !endLocation}
-          onClick={() => void calculateTrip()}
+          disabled={loading}
+          onClick={handleCalculateClick}
         >
           {loading ? (
             <>
@@ -329,23 +387,43 @@ const StopSummaryList = ({
       address: startLocation.address,
       location: { lat: startLocation.lat, lng: startLocation.lng },
       distanceFromStartMiles: 0,
-      distanceFromLastMiles: 0
+      distanceFromLastMiles: 0,
+      arrivalTime: departureDate ? departureDate.toISOString() : null
     });
   }
 
   if (endLocation) {
+    const fallbackDistanceMiles = fallbackDistance ?? fallbackRange;
+    const fallbackArrival =
+      departureDate && typeof minutesPerMile === 'number'
+        ? new Date(departureDate.getTime() + fallbackDistanceMiles * minutesPerMile * 60 * 1000)
+        : null;
+
     fallbackStops.push({
       type: 'destination',
       name: 'Destination',
       address: endLocation.address,
       location: { lat: endLocation.lat, lng: endLocation.lng },
-      distanceFromStartMiles: fallbackDistance ?? fallbackRange,
-      distanceFromLastMiles: fallbackDistance ?? fallbackRange
+      distanceFromStartMiles: fallbackDistanceMiles,
+      distanceFromLastMiles: fallbackDistanceMiles,
+      arrivalTime: fallbackArrival ? fallbackArrival.toISOString() : null
     });
   }
 
   const displayedStops = gasStops.length ? gasStops : fallbackStops;
   let sequentialIndex = 1;
+
+  const parsedArrivalTimes = displayedStops
+    .map((stop) => {
+      if (!stop.arrivalTime) return null;
+      const date = new Date(stop.arrivalTime);
+      return Number.isNaN(date.getTime()) ? null : date;
+    })
+    .filter((date): date is Date => Boolean(date));
+
+  const baselineArrivalTime = parsedArrivalTimes.length
+    ? parsedArrivalTimes.reduce((earliest, current) => (current < earliest ? current : earliest))
+    : null;
 
   const getBadgeProps = (stop: GasStop) => {
     if (stop.type === 'start') {
@@ -363,7 +441,7 @@ const StopSummaryList = ({
   };
 
   const getStopTitle = (stop: GasStop) => {
-    if (stop.type === 'start') return 'Trip start';
+    if (stop.type === 'start') return 'Starting Location';
     if (stop.type === 'destination') return 'Arrive at destination';
     return stop.name || 'Fuel stop';
   };
@@ -396,22 +474,39 @@ const StopSummaryList = ({
   };
 
   const getArrivalDate = (stop: GasStop) => {
-    if (stop.arrivalTime) {
-      const fromApi = new Date(stop.arrivalTime);
-      if (!Number.isNaN(fromApi.getTime())) {
-        return fromApi;
+    if (stop.type === 'start' && departureDate) {
+      return departureDate;
+    }
+
+    if (departureDate) {
+      if (stop.arrivalTime && baselineArrivalTime) {
+        const rawArrival = new Date(stop.arrivalTime);
+        if (!Number.isNaN(rawArrival.getTime())) {
+          const offsetMs = rawArrival.getTime() - baselineArrivalTime.getTime();
+          return new Date(departureDate.getTime() + offsetMs);
+        }
+      }
+
+      if (
+        typeof stop.distanceFromStartMiles === 'number' &&
+        typeof minutesPerMile === 'number'
+      ) {
+        const minutesFromStart = stop.distanceFromStartMiles * minutesPerMile;
+        return new Date(departureDate.getTime() + minutesFromStart * 60 * 1000);
       }
     }
 
-    if (!departureDate || !minutesPerMile || typeof stop.distanceFromStartMiles !== 'number') {
-      return null;
+    if (stop.arrivalTime) {
+      const fallbackDate = new Date(stop.arrivalTime);
+      if (!Number.isNaN(fallbackDate.getTime())) {
+        return fallbackDate;
+      }
     }
-    const minutesFromStart = stop.distanceFromStartMiles * minutesPerMile;
-    const arrival = new Date(departureDate.getTime() + minutesFromStart * 60 * 1000);
-    return arrival;
+
+    return null;
   };
 
-  const formatArrival = (arrival: Date) => formatDate(arrival, 'EEE h:mm a');
+  const formatArrival = (arrival: Date) => formatDate(arrival, 'MMM d, yyyy h:mm a');
 
   return (
     <div className="rounded-2xl border border-border bg-secondary/40 p-4">

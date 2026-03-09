@@ -44,6 +44,9 @@ export interface MapControlsProps {
   onDestinationChange: (location: MapLocation | null) => void;
   stopLocation: MapLocation | null;
   onStopChange: (location: MapLocation | null) => void;
+  showValidation?: boolean;
+  isStartInvalid?: boolean;
+  isDestinationInvalid?: boolean;
 }
 
 export interface MapComponentProps {

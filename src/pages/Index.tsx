@@ -24,7 +24,7 @@ const Index = () => {
       <Header />
       
       {/* Hero Section */}
-      <section className="container py-8 md:py-12 lg:py-16 px-4">
+      <section className="container py-8 md:py-12 lg:py-6 px-4">
         <div className="max-w-3xl mx-auto text-center mb-8 md:mb-12">
           <h1 className="text-3xl md:text-4xl lg:text-5xl xl:text-6xl font-extrabold text-foreground mb-4 leading-tight">
             Plan Your Perfect
@@ -57,7 +57,7 @@ const Index = () => {
       <footer className="border-t border-border py-8 bg-card">
         <div className="container text-center">
           <p className="text-sm text-muted-foreground">
-            © 2025 TripWise. Smart travel planning made simple.
+            © 2026 . Smart travel planning made simple.
           </p>
         </div>
       </footer>

@@ -24,10 +24,10 @@ export function Header() {
     }
   };
 
-  const navItems = [
-    { label: "Plan Trip", href: "#", active: true },
-    { label: "My Trips", href: "#" },
-    { label: "Gas Stations", href: "#" },
+const navItems = [
+  //  { label: "Plan Trip", href: "#", active: true },
+    //{ label: "My Trips", href: "#" },
+    //{ label: "Gas Stations", href: "#" },
   ];
 
   return (
@@ -38,7 +38,7 @@ export function Header() {
             <MapPin className="h-5 w-5 text-primary-foreground" />
           </div>
           <div>
-            <h1 className="text-xl font-bold text-foreground">TripWise</h1>
+            <h1 className="text-xl font-bold text-foreground"></h1>
             <p className="text-xs text-muted-foreground -mt-0.5">Smart travel planning</p>
           </div>
         </div>
@@ -72,9 +72,7 @@ export function Header() {
               <Moon className="h-4 w-4" />
             )}
           </Button>
-          <Button variant="sunset" size="sm">
-            Sign In
-          </Button>
+
         </nav>
 
         {/* Mobile Menu Button */}
@@ -125,9 +123,7 @@ export function Header() {
                 {item.label}
               </a>
             ))}
-            <Button variant="sunset" size="sm" className="w-full mt-4">
-              Sign In
-            </Button>
+ 
           </nav>
         </div>
       )}

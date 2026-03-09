@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type MutableRefObject } from 'rea
 import { v4 as uuidv4 } from 'uuid';
 import { LocateFixed, Plus, Trash2 } from 'lucide-react';
 import { MapLocation, MapControlsProps } from '@/types/googleMaps';
+import { cn } from '@/lib/utils';
 
 type UiSuggestion = {
   placeId: string;
@@ -14,7 +15,10 @@ const MapControls = ({
   stopLocation,
   onStartLocationChange,
   onDestinationChange,
-  onStopChange
+  onStopChange,
+  showValidation = false,
+  isStartInvalid = false,
+  isDestinationInvalid = false
 }: MapControlsProps) => {
   const [startInput, setStartInput] = useState('');
   const [destinationInput, setDestinationInput] = useState('');
@@ -38,6 +42,9 @@ const MapControls = ({
   const geocoderRef = useRef<google.maps.Geocoder | null>(null);
 
   const sessionToken = useMemo(() => uuidv4(), []);
+
+  const startHasError = showValidation && isStartInvalid;
+  const destinationHasError = showValidation && isDestinationInvalid;
 
   const buildQueryParams = (params: Record<string, string>): string => {
     const query = new URLSearchParams({ ...params, sessionToken });
@@ -319,7 +326,14 @@ const MapControls = ({
             onChange={(e) => handleStartChange(e.target.value)}
             placeholder="Starting location"
             aria-label="Starting location"
-            className="w-full px-3.5 py-2.5 pr-10 rounded-xl border border-white/40 bg-white/35 text-sm text-slate-900 placeholder:text-slate-500 focus:bg-white/90 focus:border-primary shadow-sm transition"
+            className={cn(
+              "w-full px-3.5 py-2.5 pr-10 rounded-xl border bg-white/35 text-sm text-slate-900 placeholder:text-slate-500 focus:bg-white/90 shadow-sm transition",
+              startHasError
+                ? "border-destructive/80 ring-1 ring-destructive/40 focus:border-destructive"
+                : "border-white/40 focus:border-primary"
+            )}
+            aria-invalid={startHasError}
+            required
           />
           {renderLocateButton('start')}
           {startSuggestions.length > 0 && (
@@ -339,6 +353,9 @@ const MapControls = ({
             </div>
           )}
         </div>
+        {startHasError && (
+          <p className="mt-1 text-xs text-destructive">Starting location is required.</p>
+        )}
       </div>
 
       {/* ADD STOP BUTTON */}
@@ -427,7 +444,14 @@ const MapControls = ({
             onChange={(e) => handleDestinationChange(e.target.value)}
             placeholder="Destination"
             aria-label="Destination"
-            className="w-full px-3.5 py-2.5 pr-10 rounded-xl border border-white/40 bg-white/35 text-sm text-slate-900 placeholder:text-slate-500 focus:bg-white/90 focus:border-primary shadow-sm transition"
+            className={cn(
+              "w-full px-3.5 py-2.5 pr-10 rounded-xl border bg-white/35 text-sm text-slate-900 placeholder:text-slate-500 focus:bg-white/90 shadow-sm transition",
+              destinationHasError
+                ? "border-destructive/80 ring-1 ring-destructive/40 focus:border-destructive"
+                : "border-white/40 focus:border-primary"
+            )}
+            aria-invalid={destinationHasError}
+            required
           />
           {renderLocateButton('destination')}
           {destinationSuggestions.length > 0 && (
@@ -447,6 +471,9 @@ const MapControls = ({
             </div>
           )}
         </div>
+        {destinationHasError && (
+          <p className="mt-1 text-xs text-destructive">Destination is required.</p>
+        )}
       </div>
     </div>
   );
